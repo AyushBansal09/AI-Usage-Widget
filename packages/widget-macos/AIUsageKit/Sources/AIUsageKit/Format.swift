@@ -40,6 +40,19 @@ public enum Format {
         w.limit == nil ? "no limit set · est." : "est. · this device"
     }
 
+    /// Headline for a provider-measured window: always a percent, it is one.
+    public static func headline(for q: QuotaWindow) -> String {
+        "\(q.percentLeft)% left"
+    }
+
+    /// The measured caveat is *when*, not *whether*: "Anthropic · 13:28".
+    public static func caveat(for q: QuotaWindow) -> String {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        f.dateStyle = .none
+        return "\(q.provider.capitalized) · \(f.string(from: q.measuredAt))"
+    }
+
     /// Short model label: "claude-opus-5" -> "opus 5", "gpt-5-codex" -> "gpt-5-codex".
     public static func shortModel(_ model: String) -> String {
         var m = model

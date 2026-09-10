@@ -9,13 +9,20 @@ import Foundation
 public struct WidgetSnapshot: Codable, Equatable, Sendable {
     public var generatedAt: Date
     public var windows: [UsageWindow]
+    /// Reported by the provider for the whole account (`connect claude`).
+    /// Optional so a widget can still read an older collector.
+    public var quota: [QuotaWindow]?
+    public var account: AccountInfo?
     public var activeAgents: Int
     public var agents: [AgentRow]
     public var day: DayTotals
 
-    public init(generatedAt: Date, windows: [UsageWindow], activeAgents: Int, agents: [AgentRow], day: DayTotals) {
+    public init(generatedAt: Date, windows: [UsageWindow], quota: [QuotaWindow]? = nil, account: AccountInfo? = nil,
+                activeAgents: Int, agents: [AgentRow], day: DayTotals) {
         self.generatedAt = generatedAt
         self.windows = windows
+        self.quota = quota
+        self.account = account
         self.activeAgents = activeAgents
         self.agents = agents
         self.day = day
@@ -23,6 +30,54 @@ public struct WidgetSnapshot: Codable, Equatable, Sendable {
 
     /// The window the tray title is built from: the first configured one.
     public var primary: UsageWindow? { windows.first }
+
+    /// The account's own 5-hour number when the account link is on. Wins over
+    /// `primary` in every view, because it is measured rather than inferred.
+    public var measured: QuotaWindow? {
+        guard let q = quota, !q.isEmpty else { return nil }
+        return q.first { $0.id == "five_hour" } ?? q.first
+    }
+}
+
+/// A provider-measured window. No `limit`/`used`: the provider only tells us the ratio.
+public struct QuotaWindow: Codable, Equatable, Sendable, Identifiable {
+    public var id: String
+    public var label: String
+    public var provider: String
+    /// 0..1 used, as reported.
+    public var fraction: Double
+    public var resetsAt: Date?
+    public var measuredAt: Date
+
+    public init(id: String, label: String, provider: String, fraction: Double, resetsAt: Date?, measuredAt: Date) {
+        self.id = id
+        self.label = label
+        self.provider = provider
+        self.fraction = fraction
+        self.resetsAt = resetsAt
+        self.measuredAt = measuredAt
+    }
+
+    public var severity: UsageWindow.Severity {
+        if fraction >= 0.9 { return .critical }
+        if fraction >= 0.7 { return .warning }
+        return .ok
+    }
+
+    public var percentLeft: Int { Int(((1 - fraction) * 100).rounded()) }
+}
+
+public struct AccountInfo: Codable, Equatable, Sendable {
+    public var enabled: Bool
+    /// "ok" | "expired" | "missing"
+    public var token: String
+    public var lastFetch: Date?
+
+    public init(enabled: Bool, token: String, lastFetch: Date?) {
+        self.enabled = enabled
+        self.token = token
+        self.lastFetch = lastFetch
+    }
 }
 
 public struct UsageWindow: Codable, Equatable, Sendable {

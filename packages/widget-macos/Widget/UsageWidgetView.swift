@@ -30,13 +30,13 @@ private struct SnapshotView: View {
     var body: some View {
         if family == .systemMedium {
             HStack(alignment: .top, spacing: 12) {
-                WindowColumn(window: snapshot.primary, activeAgents: snapshot.activeAgents, day: snapshot.day)
+                WindowColumn(window: snapshot.primary, measured: snapshot.measured, activeAgents: snapshot.activeAgents, day: snapshot.day)
                     .frame(width: 128, alignment: .leading)
                 Divider()
                 AgentsColumn(agents: snapshot.agents, activeAgents: snapshot.activeAgents, generatedAt: generatedAt)
             }
         } else {
-            WindowColumn(window: snapshot.primary, activeAgents: snapshot.activeAgents, day: snapshot.day)
+            WindowColumn(window: snapshot.primary, measured: snapshot.measured, activeAgents: snapshot.activeAgents, day: snapshot.day)
         }
     }
 }
@@ -45,6 +45,8 @@ private struct SnapshotView: View {
 /// when the user has set a limit, otherwise raw tokens used.
 private struct WindowColumn: View {
     let window: UsageWindow?
+    /// Account-reported; shown instead of `window` when present.
+    let measured: QuotaWindow?
     let activeAgents: Int
     let day: DayTotals
 
@@ -59,15 +61,24 @@ private struct WindowColumn: View {
                 }
             }
             Spacer(minLength: 0)
-            if let w = window {
+            if let q = measured {
+                Text(Format.headline(for: q))
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .foregroundStyle(tint(q.severity))
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                Text(q.resetsAt.map { "\(shortLabel(q.label)) · resets \(Format.countdown(to: $0))" } ?? shortLabel(q.label))
+                    .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                ProgressView(value: q.fraction).tint(tint(q.severity)).progressViewStyle(.linear)
+                Text(Format.caveat(for: q)).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+            } else if let w = window {
                 Text(Format.headline(for: w))
                     .font(.system(size: 26, weight: .bold, design: .rounded))
-                    .foregroundStyle(tint(w))
+                    .foregroundStyle(tint(w.severity))
                     .lineLimit(1).minimumScaleFactor(0.6)
-                Text("\(shortLabel(w)) · resets \(Format.countdown(to: w.resetsAt))")
+                Text("\(shortLabel(w.label)) · resets \(Format.countdown(to: w.resetsAt))")
                     .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 if let f = w.fraction {
-                    ProgressView(value: f).tint(tint(w)).progressViewStyle(.linear)
+                    ProgressView(value: f).tint(tint(w.severity)).progressViewStyle(.linear)
                 }
                 Text(Format.caveat(for: w)).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
             } else {
@@ -79,8 +90,8 @@ private struct WindowColumn: View {
         }
     }
 
-    private func tint(_ w: UsageWindow) -> Color {
-        switch w.severity {
+    private func tint(_ s: UsageWindow.Severity) -> Color {
+        switch s {
         case .critical: return .red
         case .warning: return .orange
         case .ok: return .primary
@@ -89,8 +100,8 @@ private struct WindowColumn: View {
     }
 
     /// "Claude 5-hour window" -> "Claude 5h"; keeps the column narrow.
-    private func shortLabel(_ w: UsageWindow) -> String {
-        w.label
+    private func shortLabel(_ label: String) -> String {
+        label
             .replacingOccurrences(of: "-hour window", with: "h")
             .replacingOccurrences(of: " weekly cap", with: " 7d")
     }

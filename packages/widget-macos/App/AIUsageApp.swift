@@ -40,7 +40,7 @@ struct ContentView: View {
                 Text("Add the widget").font(.headline)
                 Text("Right-click the desktop → Edit Widgets… (or open Notification Center and click Edit Widgets), search for “AI Usage”, and drag the small or medium size out.")
                     .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                Text("The widget only talks to the collector on 127.0.0.1:\(client.port). Numbers are estimates from this device’s local logs; other devices are invisible.")
+                Text("The widget only talks to the collector on 127.0.0.1:\(client.port). Without an account link, numbers are estimates from this device’s local logs; run `ai-usage-widget connect claude` to show your account’s real quota instead.")
                     .font(.callout).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
             }
 
@@ -69,6 +69,7 @@ struct ContentView: View {
         switch status {
         case .checking: return "Checking collector…"
         case .online(let s):
+            if let q = s.measured { return "Collector online · \(Format.headline(for: q)) (\(Format.caveat(for: q)))" }
             if let w = s.primary { return "Collector online · \(Format.headline(for: w)) (\(Format.caveat(for: w)))" }
             return "Collector online"
         case .offline: return "Collector offline on port \(client.port)"

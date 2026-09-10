@@ -34,6 +34,8 @@ export function createApp(collector: Collector, webDir: string) {
       allTime: store.totals(),
       efficiency: efficiency(inRange),
       windows: config.windows.map((w) => rollingWindow(windowEvents, w)),
+      quota: collector.account.status.quota,
+      account: collector.account.status,
       budgets: config.budgets.map((b) => budgetWindow(monthEvents, b)),
       sources: collector.sources(),
       byModel: byKey(inRange, (e) => e.model),
@@ -69,22 +71,37 @@ export function createApp(collector: Collector, webDir: string) {
     const primary = config.windows[0] ? rollingWindow(windowEvents, config.windows[0]) : null;
     const agents = buildAgentSnapshots(store.events({ since: new Date(Date.now() - 5 * 3600000).toISOString() }));
     const active = agents.filter((a) => a.status === "active").length;
+    // A measured window from the account beats the local estimate whenever
+    // we have one; the payload says which it was.
+    const measured = primaryQuota();
+    const fraction = measured ? measured.fraction : primary?.fraction ?? null;
     let title: string;
-    if (!primary) title = "—";
-    else if (primary.fraction !== null) title = `${Math.round((1 - primary.fraction) * 100)}%`;
-    else title = compact(primary.used);
+    if (fraction !== null) title = `${Math.round((1 - fraction) * 100)}%`;
+    else if (primary) title = compact(primary.used);
+    else title = "—";
     if (active) title += ` · ${active}`;
     return c.json({
       title,
-      fractionUsed: primary?.fraction ?? null,
+      measured: measured !== null,
+      measuredAt: measured?.measuredAt ?? null,
+      fractionUsed: fraction,
       used: primary?.used ?? 0,
       limit: primary?.limit ?? null,
-      resetsAt: primary?.windowEnd ?? null,
-      projectedExhaustion: primary?.projectedExhaustion ?? null,
+      resetsAt: measured?.resetsAt ?? primary?.windowEnd ?? null,
+      projectedExhaustion: measured ? null : primary?.projectedExhaustion ?? null,
       activeAgents: active,
-      severity: primary?.fraction === null || primary === null ? "none" : primary.fraction >= 0.9 ? "critical" : primary.fraction >= 0.7 ? "warning" : "ok",
+      severity: fraction === null ? "none" : fraction >= 0.9 ? "critical" : fraction >= 0.7 ? "warning" : "ok",
     });
   });
+
+  /** Connection health for the optional Anthropic account link. Never includes a token. */
+  app.get("/api/account", (c) => c.json(collector.account.status));
+
+  /** The account-reported 5h window, if the account link is on and healthy. */
+  function primaryQuota() {
+    const q = collector.account.status.quota;
+    return q.find((w) => w.id === "five_hour") ?? q[0] ?? null;
+  }
 
   /**
    * One-shot payload for the macOS WidgetKit widget.
@@ -139,6 +156,9 @@ export function createApp(collector: Collector, webDir: string) {
         /** Local logs are one device's view; never present this as measured quota. */
         estimate: true,
       })),
+      /** Measured by the provider (all devices). Empty unless `connect claude` was run. */
+      quota: collector.account.status.quota,
+      account: { enabled: collector.account.status.enabled, token: collector.account.status.token, lastFetch: collector.account.status.lastFetch },
       activeAgents: snapshots.filter((a) => a.status === "active").length,
       agents,
       day: {

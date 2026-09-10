@@ -1,0 +1,7 @@
+{
+  "_note": "Shape of GET https://api.anthropic.com/api/oauth/usage as observed from Claude Code's /usage. SYNTHETIC VALUES until `ai-usage-widget connect claude` is run on a real account and its (already token-free) output replaces this file.",
+  "five_hour": { "utilization": 62, "resets_at": "2026-09-10T21:00:00Z" },
+  "seven_day": { "utilization": 18.5, "resets_at": "2026-09-15T04:00:00Z" },
+  "seven_day_opus": { "utilization": 9, "resets_at": "2026-09-15T04:00:00Z" },
+  "extra_usage": { "enabled": false }
+}

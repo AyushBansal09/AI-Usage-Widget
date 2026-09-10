@@ -46,6 +46,31 @@ final class SnapshotDecodingTests: XCTestCase {
         XCTAssertNil(s.primary)
     }
 
+    /// With the account link on, the measured 5h window wins the headline.
+    func testMeasuredQuotaWinsOverEstimate() throws {
+        let s = try fixture()
+        let q = try XCTUnwrap(s.measured)
+        XCTAssertEqual(q.id, "five_hour")
+        XCTAssertEqual(q.percentLeft, 38)
+        XCTAssertEqual(q.severity, .ok)
+        XCTAssertEqual(Format.headline(for: q), "38% left")
+        XCTAssertTrue(Format.caveat(for: q).hasPrefix("Anthropic · "))
+        XCTAssertEqual(s.account?.token, "ok")
+    }
+
+    /// An older collector without `quota` still decodes, and falls back to the estimate.
+    func testQuotaIsOptional() throws {
+        let json = """
+        {"generatedAt":"2026-09-10T17:28:18Z","windows":[],"activeAgents":0,"agents":[],
+         "day":{"tokens":0,"costUsd":0,"unpriced":false}}
+        """
+        let s = try WidgetSnapshot.decode(Data(json.utf8))
+        XCTAssertNil(s.quota)
+        XCTAssertNil(s.measured)
+        let empty = try WidgetSnapshot.decode(Data(json.replacingOccurrences(of: "\"windows\":[]", with: "\"windows\":[],\"quota\":[]").utf8))
+        XCTAssertNil(empty.measured)
+    }
+
     func testAgentRowsStayDistinctWhenIdsCollide() throws {
         let s = try fixture()
         // Both rows have agentId "main"; the Identifiable id must still differ.

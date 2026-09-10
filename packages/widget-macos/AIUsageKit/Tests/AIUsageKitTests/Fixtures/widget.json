@@ -26,6 +26,25 @@
             "estimate": true
         }
     ],
+    "quota": [
+        {
+            "id": "five_hour",
+            "label": "Claude 5-hour window",
+            "provider": "anthropic",
+            "fraction": 0.62,
+            "resetsAt": "2026-09-10T21:00:00.000Z",
+            "measuredAt": "2026-09-10T17:28:00.000Z"
+        },
+        {
+            "id": "seven_day",
+            "label": "Claude weekly cap",
+            "provider": "anthropic",
+            "fraction": 0.185,
+            "resetsAt": "2026-09-15T04:00:00.000Z",
+            "measuredAt": "2026-09-10T17:28:00.000Z"
+        }
+    ],
+    "account": { "enabled": true, "token": "ok", "lastFetch": "2026-09-10T17:28:00.000Z" },
     "activeAgents": 1,
     "agents": [
         {

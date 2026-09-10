@@ -149,3 +149,35 @@ export interface WindowStatus {
   projectedExhaustion: string | null;
   unit: "tokens" | "usd";
 }
+
+/**
+ * A quota window as *reported by the provider*, e.g. Anthropic's own "5-hour
+ * 62% used, resets at T". Unlike WindowStatus this is a measurement, not an
+ * inference from local logs: it covers every device on the account and uses
+ * the provider's own counting rule. A separate type on purpose, so the UI can
+ * never present one as the other.
+ */
+export interface QuotaWindow {
+  /** Provider's key for the window, e.g. "five_hour", "seven_day". */
+  id: string;
+  label: string;
+  provider: "anthropic";
+  /** 0..1 used, as the provider reports it. */
+  fraction: number;
+  resetsAt: string | null;
+  /** When we fetched it; exact as of this instant only. */
+  measuredAt: string;
+}
+
+/** Health of an optional provider-account connection. Never carries a token. */
+export interface AccountStatus {
+  provider: "anthropic";
+  enabled: boolean;
+  /** Where a credential was found. */
+  credential: "keychain" | "file" | "none";
+  token: "ok" | "expired" | "missing";
+  subscription: string | null;
+  lastFetch: string | null;
+  lastError: string | null;
+  quota: QuotaWindow[];
+}

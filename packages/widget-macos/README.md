@@ -35,6 +35,11 @@ thin: every number comes from the local collector's HTTP API.
   the user has set a window `limit`; otherwise the widget shows tokens used and
   "no limit set". Every window is labelled `est.` because local logs only see
   this device. Cost shows `≥ $x` when any model in range is unpriced.
+- **With `ai-usage-widget connect claude`** the payload also carries `quota`:
+  the account's own 5h/7d utilisation as Anthropic reports it. The widget then
+  shows that number first, captioned `Anthropic · HH:MM` (the fetch time)
+  instead of `est. · this device`. `quota` is optional in the model, so the
+  widget still works against an older collector.
 - Tapping the widget opens the dashboard at `http://localhost:4321`.
 
 ## Build

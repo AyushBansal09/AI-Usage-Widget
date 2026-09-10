@@ -19,6 +19,14 @@ tokens — across whichever AI tools you use day to day.
 - **Honest numbers.** Unknown models are "unpriced", never $0. Rolling windows
   are labelled as estimates: providers do not expose exact remaining quota, and
   activity on other devices is invisible to local logs.
+- **Measured beats estimated, and the two never merge.** Anthropic *does*
+  expose per-window utilisation to a logged-in Claude Code (the `/usage`
+  endpoint). `connect claude` reuses that login read-only and surfaces the
+  result as `QuotaWindow`, a separate type from the local `WindowStatus`.
+  Every surface shows the measured 5h number first when present, labelled with
+  the provider and the fetch time; local estimates move to the secondary row.
+  Opt-in, loopback-plus-one-host, token never stored, never refreshed by us
+  (refresh tokens rotate and would log Claude Code out).
 - **Two native surfaces, one payload each.** The menu bar item polls
   `/api/tray`; the WidgetKit widget polls `/api/widget`. Both are deliberately
   dumb clients of the collector. The widget talks HTTP to `127.0.0.1` rather
@@ -92,6 +100,12 @@ tokens — across whichever AI tools you use day to day.
 2. **Provider usage APIs**: optional Anthropic Admin API and OpenAI Usage API
    pulls when the user supplies an admin key — gives real org spend to sit next
    to the local estimate. Keys stored in the OS keychain, never in config.
+   *(Done for the common case without any key: `connect claude` reads the
+   account's 5h/7d utilisation via Claude Code's own login — see
+   `packages/server/src/providers/anthropic-account.ts`. Still to do: the
+   fixture is synthetic until a real `connect claude` run replaces it; a
+   `seven_day_opus`-style per-model window in the widget's medium family;
+   the Admin API path for org spend; OpenAI's equivalent for Codex.)*
 3. **API proxy adapter**: `ai-usage-widget proxy` exposes a local
    OpenAI/Anthropic-compatible endpoint that forwards requests and records
    usage from responses, so people's own scripts and agent frameworks show up
