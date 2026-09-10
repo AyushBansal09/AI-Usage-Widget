@@ -19,6 +19,13 @@ tokens — across whichever AI tools you use day to day.
 - **Honest numbers.** Unknown models are "unpriced", never $0. Rolling windows
   are labelled as estimates: providers do not expose exact remaining quota, and
   activity on other devices is invisible to local logs.
+- **Two native surfaces, one payload each.** The menu bar item polls
+  `/api/tray`; the WidgetKit widget polls `/api/widget`. Both are deliberately
+  dumb clients of the collector. The widget talks HTTP to `127.0.0.1` rather
+  than reading the SQLite file because widget extensions are sandboxed and App
+  Groups need a paid Apple team; loopback needs only `network.client`. WidgetKit
+  decides refresh timing, so the widget is a "few minutes stale" glance, the
+  tray is the live one.
 - **Prior art acknowledged.** `ccusage` already parses most of these log formats
   for CLI reports. This project differs in being a live dashboard (agents view,
   burn-down, efficiency) and in the pluggable adapter model. Where their parsers
@@ -43,8 +50,15 @@ tokens — across whichever AI tools you use day to day.
   `/api/tray`; left-click toggles a frameless always-on-top popover positioned
   under the tray that loads `/widget`; right-click menu has Open dashboard /
   Refresh / Quit; hides on blur; runs as an Accessory app (no Dock icon);
-  spawns the collector if it is not running. Compiles on Linux; first macOS
-  run pending.
+  spawns the collector if it is not running. `cargo check` passes on macOS
+  (needs the `macos-private-api` Cargo feature for the transparent popover);
+  first interactive run still to be confirmed.
+- `@ai-usage-widget/widget-macos`: native WidgetKit widget (Swift, Xcode
+  project + `AIUsageKit` package). Small family = headline number for the
+  primary window; medium adds up to three agents with their current activity
+  and an "as of" time. Fed by one `GET /api/widget` per refresh over loopback.
+  Builds and registers with `pluginkit` using ad-hoc signing; `swift test`
+  covers decoding a scrubbed real payload and the formatting rules.
 - `@ai-usage-widget/web`: React dashboard — tokens-left cards, efficiency tiles,
   stacked timeline with hover, agents table, by-model table, sources. Light and
   dark themes. Live via SSE.
@@ -60,7 +74,11 @@ tokens — across whichever AI tools you use day to day.
 4. Per-session drill-down page: turn-by-turn context growth, tool mix, and a
    "why is this expensive" panel (largest context jumps, retried tools).
 5. Menu bar widget polish: first run on macOS, notarised .dmg via GitHub Actions, launch-at-login, notification when a window crosses 80%/95%.
-6. `npm publish` as a single `ai-usage-widget` package; GitHub Actions for
+6. WidgetKit widget polish: an accent/background colour asset, a large family
+   with the 7-day window next to the 5-hour one, and an App Intent to pick
+   which window the small widget shows. Ship it inside the same .dmg as the
+   menu bar app (one bundle id family) once signing is sorted out.
+7. `npm publish` as a single `ai-usage-widget` package; GitHub Actions for
    typecheck + tests on macOS/Linux/Windows.
 
 ### Phase 2 — Codex CLI

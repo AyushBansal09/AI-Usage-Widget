@@ -10,3 +10,7 @@ packages/menubar/src-tauri/target/
 packages/menubar/src-tauri/gen/
 packages/server/public/
 !packages/menubar/dist/
+packages/widget-macos/build/
+packages/widget-macos/AIUsageKit/.build/
+*.xcuserdatad/
+xcuserdata/

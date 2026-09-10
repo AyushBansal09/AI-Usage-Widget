@@ -77,6 +77,23 @@ pnpm --filter @ai-usage-widget/menubar bundle       # .app + .dmg in packages/me
 
 Right-click the tray item for *Open dashboard*, *Refresh now*, *Quit*.
 
+## Desktop / Notification Center widget (macOS)
+
+A native WidgetKit widget in `packages/widget-macos`: small = "41% left" for
+your primary window; medium adds what each agent is doing right now. It reads
+one JSON payload (`/api/widget`) from the collector over `127.0.0.1` — no
+files, no accounts, loopback only. Refresh timing is up to macOS (it budgets
+widget refreshes), so the medium size prints "as of HH:MM".
+
+```bash
+# prerequisites: Xcode 16+; no Apple developer account needed (signed to run locally)
+pnpm --filter @ai-usage-widget/widget-macos bundle       # xcodebuild → build/Build/Products/Release/AIUsageWidget.app
+pnpm --filter @ai-usage-widget/widget-macos install-app  # copy to /Applications and open once
+```
+
+Then right-click the desktop → *Edit Widgets…* → search "AI Usage". Details
+and design notes in `packages/widget-macos/README.md`.
+
 ## Configuration
 
 First run writes `~/.ai-usage-widget/config.json` (override the directory with
@@ -111,6 +128,7 @@ packages/
   server/               Collector (adapters -> store), Hono API + SSE, CLI, serves the built dashboard
   web/                  React dashboard + compact /widget view, builds into server/public
   menubar/              Tauri menu bar app: tray title from /api/tray, popover loads /widget
+  widget-macos/         Native WidgetKit widget (Swift): small/medium families fed by /api/widget over loopback
 ```
 
 An adapter implements three methods — `detect()`, `backfill(emit)`,

@@ -1,0 +1,15 @@
+{
+  "name": "@ai-usage-widget/widget-macos",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Native macOS WidgetKit widget (desktop / Notification Center). Reads the local collector over 127.0.0.1; no accounts, no network beyond loopback.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'widget-macos: run `pnpm --filter @ai-usage-widget/widget-macos bundle` on macOS to build the .app'",
+    "bundle": "xcodebuild -project AIUsageWidget.xcodeproj -scheme AIUsageWidget -configuration Release -derivedDataPath build CODE_SIGN_IDENTITY=- build",
+    "install-app": "rm -rf /Applications/AIUsageWidget.app && cp -R build/Build/Products/Release/AIUsageWidget.app /Applications/ && open /Applications/AIUsageWidget.app",
+    "typecheck": "echo 'widget-macos: no TS'",
+    "test": "cd AIUsageKit && swift test"
+  }
+}
