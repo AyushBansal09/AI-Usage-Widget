@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>AI Usage</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font: 13px -apple-system, system-ui, sans-serif; background: transparent; color: #0b0b0b; padding: 16px; }
+  @media (prefers-color-scheme: dark) { body { color: #fff; } }
+  .muted { color: #898781; }
+  code { font-family: ui-monospace, Menlo, monospace; }
+</style>
+</head>
+<body>
+  <!--
+    Bootstrap page. The real popover UI is served by the local collector at
+    /widget so the dashboard and the widget share one React codebase. This
+    page just waits for the collector, then navigates there.
+  -->
+  <div><b>AI Usage Widget</b></div>
+  <p id="msg" class="muted">Connecting to the local collector…</p>
+  <p class="muted">If this does not go away, start it in a terminal:<br /><code>ai-usage-widget serve --no-open</code></p>
+  <script>
+    const port = new URLSearchParams(location.search).get("port") || "4321";
+    const base = `http://127.0.0.1:${port}`;
+    let tries = 0;
+    async function tick() {
+      try {
+        const r = await fetch(base + "/api/health", { cache: "no-store" });
+        if (r.ok) { location.replace(base + "/widget?host=tauri"); return; }
+      } catch {}
+      tries++;
+      document.getElementById("msg").textContent = `Connecting to the local collector… (${tries})`;
+      setTimeout(tick, 1500);
+    }
+    tick();
+  </script>
+</body>
+</html>

@@ -9,3 +9,4 @@ dist/
 packages/menubar/src-tauri/target/
 packages/menubar/src-tauri/gen/
 packages/server/public/
+!packages/menubar/dist/
