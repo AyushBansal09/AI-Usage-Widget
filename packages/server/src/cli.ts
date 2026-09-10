@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 import { exec } from "node:child_process";
 import { Collector } from "./collector.js";
 import { createApp } from "./app.js";
-import { buildAgentSnapshots } from "@ai-usage-widget/core";
+import { buildAgentSnapshots, loadConfig, saveConfig, configPath } from "@ai-usage-widget/core";
+import { AnthropicAccount, credentialsFilePath } from "./providers/anthropic-account.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const WEB_DIR = join(here, "..", "public");
@@ -42,7 +43,58 @@ async function main() {
         const d = await a.detect();
         console.log(`${d.available ? "✔" : "✘"} ${a.name}  ${d.location ?? ""} ${d.reason ?? ""}`);
       }
+      const acct = collector.config.providers.anthropicAccount;
+      if (acct.enabled) {
+        const s = await collector.account.refresh();
+        console.log(`${s.token === "ok" && !s.lastError ? "✔" : "✘"} claude account  ${describeAccount(s)}`);
+      } else {
+        console.log(`· claude account  off (run \`ai-usage-widget connect claude\` to show real quota)`);
+      }
       collector.stop();
+      break;
+    }
+    case "connect": {
+      // `connect claude`: reuse Claude Code's login to read the account's real
+      // quota. One test fetch first, so the config is only switched on when it
+      // actually works. Prints percentages, never the token.
+      if (rest[0] !== "claude") return usage();
+      const cfg = loadConfig();
+      const acct = new AnthropicAccount({ ...cfg.providers.anthropicAccount, enabled: true });
+      const s = await acct.refresh();
+      if (s.token === "missing") {
+        console.error(`✘ No Claude Code login found (looked in the macOS Keychain "Claude Code-credentials" and ${credentialsFilePath()}).`);
+        console.error(`  Run \`claude\`, sign in, then try again.`);
+        process.exit(1);
+      }
+      if (s.token === "expired") {
+        console.error(`✘ ${s.lastError}`);
+        process.exit(1);
+      }
+      if (s.lastError) {
+        console.error(`✘ ${s.lastError}`);
+        process.exit(1);
+      }
+      if (flags.has("--raw")) {
+        // The response body as received. Contains utilisation only, never a
+        // token; this is how the test fixture is captured.
+        console.log(JSON.stringify(acct.lastRaw, null, 2));
+      }
+      cfg.providers.anthropicAccount.enabled = true;
+      saveConfig(cfg);
+      console.log(`✔ Connected to your Claude account via Claude Code's login (${s.credential}${s.subscription ? `, ${s.subscription} plan` : ""}).`);
+      for (const w of s.quota) {
+        console.log(`  ${w.label.padEnd(24)} ${Math.round(w.fraction * 100)}% used${w.resetsAt ? `, resets ${w.resetsAt}` : ""}`);
+      }
+      console.log(`\nSaved to ${configPath()}. The collector polls every ${cfg.providers.anthropicAccount.pollSeconds}s; restart \`serve\` (or the menu bar app) to pick it up.`);
+      console.log(`Undo with \`ai-usage-widget disconnect claude\`.`);
+      break;
+    }
+    case "disconnect": {
+      if (rest[0] !== "claude") return usage();
+      const cfg = loadConfig();
+      cfg.providers.anthropicAccount.enabled = false;
+      saveConfig(cfg);
+      console.log(`✔ Claude account link off. Nothing was stored; the widget is back to local estimates.`);
       break;
     }
     case "agents": {
@@ -56,9 +108,19 @@ async function main() {
       break;
     }
     default:
-      console.error(`Usage: ai-usage-widget [serve|backfill|doctor|agents] [--port=4321] [--no-open]`);
-      process.exit(1);
+      usage();
   }
+}
+
+function usage(): never {
+  console.error(`Usage: ai-usage-widget [serve|backfill|doctor|agents|connect claude|disconnect claude] [--port=4321] [--no-open]`);
+  process.exit(1);
+}
+
+function describeAccount(s: { credential: string; token: string; subscription: string | null; lastError: string | null; quota: Array<{ label: string; fraction: number }> }): string {
+  if (s.lastError) return s.lastError;
+  const q = s.quota.map((w) => `${w.label} ${Math.round(w.fraction * 100)}%`).join(", ");
+  return `${s.credential}${s.subscription ? ` (${s.subscription})` : ""}: ${q}`;
 }
 
 function openBrowser(url: string) {

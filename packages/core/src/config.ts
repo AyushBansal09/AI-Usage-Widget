@@ -56,6 +56,26 @@ export const ConfigSchema = z.object({
     .default({}),
   /** Per-adapter settings; adapters read their own key. */
   adapters: z.record(z.record(z.unknown())).default({}),
+  /**
+   * Optional provider-account connections. Off by default: the only network
+   * call the collector makes is one the user switched on (`connect claude`).
+   */
+  providers: z
+    .object({
+      /**
+       * Reuse Claude Code's own login (its OAuth token in the macOS Keychain or
+       * ~/.claude/.credentials.json) to read the account's real rolling-window
+       * usage from Anthropic. Read-only: the token is never refreshed or
+       * written, so Claude Code's login cannot be disturbed.
+       */
+      anthropicAccount: z
+        .object({
+          enabled: z.boolean().default(false),
+          pollSeconds: z.number().int().min(30).default(120),
+        })
+        .default({}),
+    })
+    .default({}),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -74,6 +94,15 @@ export function loadConfig(): Config {
     return cfg;
   }
   return ConfigSchema.parse(JSON.parse(readFileSync(file, "utf8")));
+}
+
+export function configPath(): string {
+  return join(dataDir(), "config.json");
+}
+
+/** Validate and persist. */
+export function saveConfig(cfg: Config): void {
+  writeFileSync(configPath(), JSON.stringify(ConfigSchema.parse(cfg), null, 2) + "\n");
 }
 
 export function dbPath(): string {

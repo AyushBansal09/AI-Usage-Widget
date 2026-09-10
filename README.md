@@ -77,11 +77,60 @@ pnpm --filter @ai-usage-widget/menubar bundle       # .app + .dmg in packages/me
 
 Right-click the tray item for *Open dashboard*, *Refresh now*, *Quit*.
 
+## Desktop / Notification Center widget (macOS)
+
+A native WidgetKit widget in `packages/widget-macos`: small = "41% left" for
+your primary window; medium adds what each agent is doing right now. It reads
+one JSON payload (`/api/widget`) from the collector over `127.0.0.1` — no
+files, no accounts, loopback only. Refresh timing is up to macOS (it budgets
+widget refreshes), so the medium size prints "as of HH:MM".
+
+```bash
+# prerequisites: Xcode 16+; no Apple developer account needed (signed to run locally)
+pnpm --filter @ai-usage-widget/widget-macos bundle       # xcodebuild → build/Build/Products/Release/AIUsageWidget.app
+pnpm --filter @ai-usage-widget/widget-macos install-app  # copy to /Applications and open once
+```
+
+Then right-click the desktop → *Edit Widgets…* → search "AI Usage". Details
+and design notes in `packages/widget-macos/README.md`.
+
+## Connect your Claude account (real quota, not an estimate)
+
+By default every window is an *estimate* from this device's logs. If you use
+Claude Code, you already have a login on this machine; one command reuses it to
+read your account's real rolling-window usage — the same numbers `/usage` shows:
+
+```bash
+ai-usage-widget connect claude      # one test fetch, then switches it on in config
+ai-usage-widget doctor              # shows "claude account  keychain (max): Claude 5-hour window 62%, …"
+ai-usage-widget disconnect claude   # off again; nothing was stored
+```
+
+What it does and does not do:
+
+- Reads Claude Code's OAuth token from the macOS Keychain (`Claude Code-credentials`)
+  or `~/.claude/.credentials.json` and calls `https://api.anthropic.com/api/oauth/usage`
+  every 2 minutes (`providers.anthropicAccount.pollSeconds`). That is the only
+  network call the collector ever makes, and only after you opt in.
+- **Read-only.** It never refreshes or rewrites the token, so Claude Code's own
+  login is untouched. If the token has expired, the widget says so and falls
+  back to the local estimate until you open `claude` again.
+- The token never appears in the API, logs or config. `/api/account` exposes
+  only health: where the credential was found, ok/expired/missing, last fetch.
+- macOS may ask once whether `node` can read that Keychain item; *Always Allow*.
+
+When connected, the menu bar title, the popover, the WidgetKit widget and the
+dashboard all put the measured 5-hour number first, labelled
+"Anthropic · HH:MM", and keep the local estimates in the secondary row. The
+two are never merged: one is a measurement of your whole account, the other an
+inference from one device's logs.
+
 ## Configuration
 
 First run writes `~/.ai-usage-widget/config.json` (override the directory with
 `AI_USAGE_WIDGET_HOME`). Set `limit` on a window to turn the usage number into a
-percentage — providers do not expose exact quotas, so this is your own estimate:
+percentage — providers do not expose exact quotas, so this is your own estimate
+(or skip that and `connect claude` above):
 
 ```jsonc
 {
@@ -94,7 +143,8 @@ percentage — providers do not expose exact quotas, so this is your own estimat
     { "id": "daily-usd", "label": "Daily spend", "unit": "usd", "sources": [], "period": "day", "limit": 20 }
   ],
   "pricing": { "claude-fable-5-1": { "input": 0, "output": 0 } },
-  "adapters": {}
+  "adapters": {},
+  "providers": { "anthropicAccount": { "enabled": false, "pollSeconds": 120 } }
 }
 ```
 
@@ -111,6 +161,7 @@ packages/
   server/               Collector (adapters -> store), Hono API + SSE, CLI, serves the built dashboard
   web/                  React dashboard + compact /widget view, builds into server/public
   menubar/              Tauri menu bar app: tray title from /api/tray, popover loads /widget
+  widget-macos/         Native WidgetKit widget (Swift): small/medium families fed by /api/widget over loopback
 ```
 
 An adapter implements three methods — `detect()`, `backfill(emit)`,

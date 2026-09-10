@@ -1,0 +1,86 @@
+{
+    "generatedAt": "2026-09-10T17:28:18.636Z",
+    "windows": [
+        {
+            "id": "claude-5h",
+            "label": "Claude 5-hour window",
+            "used": 4688770,
+            "limit": 8000000,
+            "fraction": 0.58609625,
+            "unit": "tokens",
+            "resetsAt": "2026-09-10T21:40:27.420Z",
+            "projectedExhaustion": "2026-09-10T18:02:06.304Z",
+            "burnRatePerHour": 5878889,
+            "estimate": true
+        },
+        {
+            "id": "claude-7d",
+            "label": "Claude weekly cap",
+            "used": 4688770,
+            "limit": null,
+            "fraction": null,
+            "unit": "tokens",
+            "resetsAt": "2026-09-17T16:40:27.420Z",
+            "projectedExhaustion": null,
+            "burnRatePerHour": 5878887,
+            "estimate": true
+        }
+    ],
+    "quota": [
+        {
+            "id": "five_hour",
+            "label": "Claude 5-hour window",
+            "provider": "anthropic",
+            "fraction": 0.2,
+            "resetsAt": "2026-09-10T19:50:00.093Z",
+            "measuredAt": "2026-09-10T18:11:17.753Z"
+        },
+        {
+            "id": "seven_day",
+            "label": "Claude weekly cap",
+            "provider": "anthropic",
+            "fraction": 0.07,
+            "resetsAt": "2026-09-13T16:00:00.093Z",
+            "measuredAt": "2026-09-10T18:11:17.753Z"
+        },
+        {
+            "id": "extra_usage",
+            "label": "Extra usage (spend cap)",
+            "provider": "anthropic",
+            "fraction": 0.393,
+            "resetsAt": null,
+            "measuredAt": "2026-09-10T18:11:17.753Z"
+        }
+    ],
+    "account": { "enabled": true, "token": "ok", "lastFetch": "2026-09-10T17:28:00.000Z" },
+    "activeAgents": 1,
+    "agents": [
+        {
+            "agentId": "main",
+            "label": "ai-usage-widget",
+            "model": "claude-fable-5-1",
+            "status": "active",
+            "activity": "Bash: Build server, run it on a spare port, fetch the widg…",
+            "costUsd": 1.8423,
+            "unpriced": false,
+            "tokens": 1219440,
+            "lastSeen": "2026-09-10T17:28:08.432Z"
+        },
+        {
+            "agentId": "main",
+            "label": "example-project",
+            "model": "claude-opus-5",
+            "status": "idle",
+            "activity": "Both done. Look at your menu bar — there should be an ite…",
+            "costUsd": 1.3382,
+            "unpriced": true,
+            "tokens": 3469330,
+            "lastSeen": "2026-09-10T17:02:21.642Z"
+        }
+    ],
+    "day": {
+        "tokens": 4688770,
+        "costUsd": 3.180507,
+        "unpriced": true
+    }
+}

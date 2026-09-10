@@ -34,6 +34,8 @@ export function createApp(collector: Collector, webDir: string) {
       allTime: store.totals(),
       efficiency: efficiency(inRange),
       windows: config.windows.map((w) => rollingWindow(windowEvents, w)),
+      quota: collector.account.status.quota,
+      account: collector.account.status,
       budgets: config.budgets.map((b) => budgetWindow(monthEvents, b)),
       sources: collector.sources(),
       byModel: byKey(inRange, (e) => e.model),
@@ -69,20 +71,101 @@ export function createApp(collector: Collector, webDir: string) {
     const primary = config.windows[0] ? rollingWindow(windowEvents, config.windows[0]) : null;
     const agents = buildAgentSnapshots(store.events({ since: new Date(Date.now() - 5 * 3600000).toISOString() }));
     const active = agents.filter((a) => a.status === "active").length;
+    // A measured window from the account beats the local estimate whenever
+    // we have one; the payload says which it was.
+    const measured = primaryQuota();
+    const fraction = measured ? measured.fraction : primary?.fraction ?? null;
     let title: string;
-    if (!primary) title = "—";
-    else if (primary.fraction !== null) title = `${Math.round((1 - primary.fraction) * 100)}%`;
-    else title = compact(primary.used);
+    if (fraction !== null) title = `${Math.round((1 - fraction) * 100)}%`;
+    else if (primary) title = compact(primary.used);
+    else title = "—";
     if (active) title += ` · ${active}`;
     return c.json({
       title,
-      fractionUsed: primary?.fraction ?? null,
+      measured: measured !== null,
+      measuredAt: measured?.measuredAt ?? null,
+      fractionUsed: fraction,
       used: primary?.used ?? 0,
       limit: primary?.limit ?? null,
-      resetsAt: primary?.windowEnd ?? null,
-      projectedExhaustion: primary?.projectedExhaustion ?? null,
+      resetsAt: measured?.resetsAt ?? primary?.windowEnd ?? null,
+      projectedExhaustion: measured ? null : primary?.projectedExhaustion ?? null,
       activeAgents: active,
-      severity: primary?.fraction === null || primary === null ? "none" : primary.fraction >= 0.9 ? "critical" : primary.fraction >= 0.7 ? "warning" : "ok",
+      severity: fraction === null ? "none" : fraction >= 0.9 ? "critical" : fraction >= 0.7 ? "warning" : "ok",
+    });
+  });
+
+  /** Connection health for the optional Anthropic account link. Never includes a token. */
+  app.get("/api/account", (c) => c.json(collector.account.status));
+
+  /** The account-reported 5h window, if the account link is on and healthy. */
+  function primaryQuota() {
+    const q = collector.account.status.quota;
+    return q.find((w) => w.id === "five_hour") ?? q[0] ?? null;
+  }
+
+  /**
+   * One-shot payload for the macOS WidgetKit widget.
+   *
+   * A widget extension gets a small, OS-budgeted number of refreshes per day,
+   * so it must never need more than one request: everything the small and the
+   * medium family can draw is here. Deliberately pre-formatted (labels, short
+   * strings) to keep the Swift side free of product decisions.
+   *
+   * Honesty rules the widget depends on:
+   * - `limit: null` means the user has not told us their cap. `fraction` is
+   *   then null and the widget shows tokens used, never an invented percent.
+   * - `estimate: true` is always set on windows: local logs cannot see usage
+   *   from other devices and providers do not publish remaining quota.
+   * - `unpriced` is true when any event in range used a model missing from the
+   *   pricing table, so the widget can mark cost as a floor, not a total.
+   */
+  app.get("/api/widget", (c) => {
+    const now = Date.now();
+    const windowEvents = store.events({ since: new Date(now - 8 * 24 * 3600000).toISOString() });
+    const windows = config.windows.map((w) => rollingWindow(windowEvents, w));
+    const recent = store.events({ since: new Date(now - 5 * 3600000).toISOString() });
+    const snapshots = buildAgentSnapshots(recent);
+    const rank: Record<string, number> = { active: 0, idle: 1, done: 2 };
+    const agents = [...snapshots]
+      .sort((a, b) => rank[a.status]! - rank[b.status]! || b.lastSeen.localeCompare(a.lastSeen))
+      .slice(0, 4)
+      .map((a) => ({
+        agentId: a.agentId,
+        label: a.project ? a.project.split("/").filter(Boolean).pop() ?? a.project : a.agentId,
+        model: a.model,
+        status: a.status,
+        activity: a.lastActivity ? truncate(a.lastActivity, 60) : null,
+        costUsd: a.costUsd,
+        unpriced: a.unpriced,
+        tokens: a.inputTokens + a.outputTokens + a.cacheReadTokens + a.cacheWriteTokens,
+        lastSeen: a.lastSeen,
+      }));
+    const day = store.totals({ since: new Date(now - 24 * 3600000).toISOString() });
+    return c.json({
+      generatedAt: new Date(now).toISOString(),
+      windows: windows.map((w) => ({
+        id: w.id,
+        label: w.label,
+        used: w.used,
+        limit: w.limit,
+        fraction: w.fraction,
+        unit: w.unit,
+        resetsAt: w.windowEnd,
+        projectedExhaustion: w.projectedExhaustion,
+        burnRatePerHour: w.burnRatePerHour,
+        /** Local logs are one device's view; never present this as measured quota. */
+        estimate: true,
+      })),
+      /** Measured by the provider (all devices). Empty unless `connect claude` was run. */
+      quota: collector.account.status.quota,
+      account: { enabled: collector.account.status.enabled, token: collector.account.status.token, lastFetch: collector.account.status.lastFetch },
+      activeAgents: snapshots.filter((a) => a.status === "active").length,
+      agents,
+      day: {
+        tokens: day.inputTokens + day.outputTokens + day.cacheReadTokens + day.cacheWriteTokens,
+        costUsd: day.costUsd,
+        unpriced: day.unpricedEvents > 0,
+      },
     });
   });
 
@@ -111,6 +194,12 @@ export function createApp(collector: Collector, webDir: string) {
   });
 
   return app;
+}
+
+/** One line, markdown emphasis stripped: activity strings can be prompt excerpts. */
+function truncate(s: string, n: number): string {
+  const one = s.replace(/[*_`#>]+/g, "").replace(/\s+/g, " ").trim();
+  return one.length <= n ? one : one.slice(0, n - 1) + "\u2026";
 }
 
 function compact(n: number): string {

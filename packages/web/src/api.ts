@@ -15,9 +15,17 @@ export interface WindowStatus {
   projectedExhaustion: string | null; unit: "tokens" | "usd";
 }
 export interface SourceStatus { name: string; available: boolean; location?: string; reason?: string; events: number }
+/** Reported by the provider for the whole account — a measurement, unlike WindowStatus. */
+export interface QuotaWindow {
+  id: string; label: string; provider: "anthropic"; fraction: number; resetsAt: string | null; measuredAt: string;
+}
+export interface AccountStatus {
+  provider: "anthropic"; enabled: boolean; credential: "keychain" | "file" | "none"; token: "ok" | "expired" | "missing";
+  subscription: string | null; lastFetch: string | null; lastError: string | null; quota: QuotaWindow[];
+}
 export interface Summary {
   range: string; totals: Totals; allTime: Totals; efficiency: Efficiency;
-  windows: WindowStatus[]; budgets: WindowStatus[]; sources: SourceStatus[];
+  windows: WindowStatus[]; quota: QuotaWindow[]; account: AccountStatus; budgets: WindowStatus[]; sources: SourceStatus[];
   byModel: Array<{ key: string; tokens: number; costUsd: number; events: number }>;
   bySource: Array<{ key: string; tokens: number; costUsd: number; events: number }>;
 }
