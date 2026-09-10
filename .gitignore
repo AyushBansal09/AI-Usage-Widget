@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+*.log
+.env
+.env.*
+# local runtime data (SQLite db, config) lives in ~/.ai-usage-widget, never in the repo

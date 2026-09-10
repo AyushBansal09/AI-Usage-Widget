@@ -1,0 +1,32 @@
+{
+  "name": "@ai-usage-widget/server",
+  "version": "0.0.1",
+  "description": "Local collector + dashboard server for ai-usage-widget. `npx ai-usage-widget` starts here.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "ai-usage-widget": "./dist/cli.js"
+  },
+  "files": ["dist", "public"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/cli.ts serve --no-open",
+    "start": "node dist/cli.js serve",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@ai-usage-widget/adapter-claude-code": "workspace:*",
+    "@ai-usage-widget/adapter-codex": "workspace:*",
+    "@ai-usage-widget/core": "workspace:*",
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}

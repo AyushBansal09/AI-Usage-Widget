@@ -1,0 +1,29 @@
+{
+  "name": "@ai-usage-widget/adapter-codex",
+  "version": "0.0.1",
+  "description": "Reads OpenAI Codex CLI rollout logs (~/.codex/sessions/**/*.jsonl) into ai-usage-widget UsageEvents.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ai-usage-widget/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}
