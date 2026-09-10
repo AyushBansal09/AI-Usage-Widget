@@ -20,9 +20,16 @@
         "skipTaskbar": true,
         "resizable": false,
         "shadow": true,
-        "focus": true
+        "focus": true,
+        "transparent": true,
+        "windowEffects": {
+          "effects": ["popover"],
+          "state": "active",
+          "radius": 22
+        }
       }
     ],
+    "macOSPrivateApi": true,
     "security": {
       "csp": null
     }

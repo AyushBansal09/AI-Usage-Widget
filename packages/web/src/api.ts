@@ -66,6 +66,7 @@ export const fmt = {
     return "$" + (n >= 100 ? n.toFixed(0) : n >= 1 ? n.toFixed(2) : n.toFixed(3));
   },
   pct(n: number): string {
+    if (n <= 0) return "0%";
     return (n * 100).toFixed(n >= 0.1 ? 0 : 1) + "%";
   },
   ago(iso: string): string {

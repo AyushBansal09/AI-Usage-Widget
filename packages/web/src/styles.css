@@ -89,26 +89,83 @@ tr:last-child td { border-bottom: 0; }
 .sources span { border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; background: var(--surface); }
 .sources span.off { color: var(--muted); text-decoration: line-through; }
 
-/* ---- compact widget view (menu bar popover) ---- */
-html[data-view="widget"] body { background: var(--surface); overflow: hidden; user-select: none; }
-.widget { width: 100%; max-width: 360px; padding: 12px 14px 10px; font-size: 13px; }
-.w-primary { padding-bottom: 10px; border-bottom: 1px solid var(--grid); }
+/* ---- compact widget view: Liquid Glass (iOS 27 / macOS 27) ----
+   Semantic tokens follow Apple's system colors. Inside the Tauri popover the
+   page is transparent and the OS vibrancy material shows through; in a plain
+   browser a soft gradient stands in for the desktop so the glass has something
+   to refract. Borders are defined (not shadow-only), corners are concentric
+   (outer 22 → card 16 → control 10), numerals are tabular, glass is frosted. */
+html[data-view="widget"] {
+  --sys-blue: #007aff; --sys-green: #34c759; --sys-orange: #ff9500; --sys-red: #ff3b30;
+  --label: rgba(0, 0, 0, 0.88); --label-2: rgba(60, 60, 67, 0.62); --label-3: rgba(60, 60, 67, 0.36);
+  --separator: rgba(60, 60, 67, 0.18);
+  --glass: rgba(255, 255, 255, 0.58); --glass-strong: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.9); --glass-edge: rgba(0, 0, 0, 0.08);
+  --track: rgba(120, 120, 128, 0.18);
+  --backdrop: linear-gradient(135deg, #dfe7f5 0%, #f2e9f4 50%, #e5f1ea 100%);
+  --r-outer: 22px; --r-card: 16px; --r-ctl: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-view="widget"]:not([data-theme="light"]) {
+    --sys-blue: #0a84ff; --sys-green: #30d158; --sys-orange: #ff9f0a; --sys-red: #ff453a;
+    --label: rgba(255, 255, 255, 0.92); --label-2: rgba(235, 235, 245, 0.62); --label-3: rgba(235, 235, 245, 0.36);
+    --separator: rgba(84, 84, 88, 0.55);
+    --glass: rgba(50, 50, 54, 0.52); --glass-strong: rgba(60, 60, 64, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.16); --glass-edge: rgba(0, 0, 0, 0.35);
+    --track: rgba(120, 120, 128, 0.32);
+    --backdrop: linear-gradient(135deg, #1b2130 0%, #2a2333 50%, #1d2a25 100%);
+  }
+}
+html[data-view="widget"] body {
+  margin: 0; background: var(--backdrop); color: var(--label); overflow: hidden; user-select: none;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums;
+}
+/* Inside the native popover the material comes from the OS, not CSS. */
+html[data-view="widget"][data-host="tauri"] body { background: transparent; }
+
+.widget { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(24px) saturate(160%); backdrop-filter: blur(24px) saturate(160%);
+  border-radius: var(--r-card);
+  border: 0.5px solid var(--glass-edge);
+  box-shadow: inset 0 0 0 0.5px var(--glass-border), 0 1px 2px rgba(0,0,0,0.06);
+}
+.w-primary { padding: 12px 14px 12px; }
 .w-primary-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.w-label { color: var(--ink-2); font-size: 12px; }
-.w-hero { font-size: 28px; font-weight: 600; line-height: 1.15; }
-.w-right { text-align: right; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
-.w-warn { color: var(--critical); font-weight: 600; }
-.w-others { display: flex; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--grid); }
-.w-mini { flex: 1; display: flex; flex-direction: column; font-size: 12px; }
-.w-section { display: flex; justify-content: space-between; margin: 10px 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-2); }
-.w-muted { color: var(--muted); font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; }
-.w-pad { padding: 6px 0 8px; }
-.w-agent { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; }
-.w-agent .status { margin-top: 5px; }
+.w-label { color: var(--label-2); font-size: 12px; font-weight: 500; letter-spacing: -0.01em; }
+.w-hero { font: 700 30px/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; letter-spacing: -0.02em; margin-top: 1px; }
+.w-right { text-align: right; font-size: 12px; color: var(--label-2); white-space: nowrap; line-height: 1.5; }
+.w-right b { color: var(--label); font-weight: 600; }
+.w-warn { color: var(--sys-red); font-weight: 600; }
+.meter { height: 8px; background: var(--track); border-radius: 999px; overflow: hidden; margin-top: 10px; box-shadow: inset 0 0.5px 1px rgba(0,0,0,0.08); }
+.meter > div { height: 100%; border-radius: 999px; background: var(--sys-blue); transition: width 400ms ease; }
+.meter > div.warn { background: var(--sys-orange); }
+.meter > div.crit { background: var(--sys-red); }
+.w-others { display: flex; gap: 8px; }
+.w-mini { flex: 1; padding: 8px 12px; display: flex; flex-direction: column; font-size: 12px; }
+.w-mini b { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.w-section { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 12px 2px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; color: var(--label-2); }
+.w-muted { color: var(--label-2); font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.w-pad { padding: 10px 12px; }
+.w-list { padding: 0 12px; }
+.w-agent { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 0.5px solid var(--separator); }
+.w-agent:last-child { border-bottom: 0; }
+.w-agent .status { margin-top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--label-3); flex: none; }
+.w-agent .status.active { background: var(--sys-green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sys-green) 25%, transparent); }
+.w-agent .status.idle { background: var(--sys-orange); }
 .w-agent-body { min-width: 0; flex: 1; }
-.w-agent-title { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; font-size: 12px; }
-.w-agent-act { color: var(--ink-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.w-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--grid); font-size: 12px; }
-.w-foot a { color: var(--series-1); text-decoration: none; }
-.w-err { background: color-mix(in srgb, var(--critical) 12%, transparent); color: var(--ink); padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 8px; }
-.w-err code { font-family: ui-monospace, Menlo, monospace; }
+.w-agent-title { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; font-size: 13px; letter-spacing: -0.01em; }
+.w-agent-act { color: var(--label-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.w-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 2px 6px 0; font-size: 12px; color: var(--label-2); }
+.w-foot .live { color: var(--label-2); }
+.w-foot .live::before { background: var(--sys-green); }
+.w-foot .live.off::before { background: var(--sys-red); }
+.w-foot a {
+  color: var(--sys-blue); text-decoration: none; font-weight: 600; padding: 5px 11px; border-radius: 999px;
+  background: var(--glass-strong); border: 0.5px solid var(--glass-edge); box-shadow: inset 0 0 0 0.5px var(--glass-border);
+}
+.w-foot a:active { transform: scale(0.97); }
+.w-err { background: color-mix(in srgb, var(--sys-red) 14%, var(--glass)); color: var(--label); padding: 8px 12px; border-radius: var(--r-card); font-size: 12px; }
+.w-err code { font-family: ui-monospace, "SF Mono", Menlo, monospace; }

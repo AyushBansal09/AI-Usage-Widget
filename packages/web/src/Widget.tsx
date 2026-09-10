@@ -37,23 +37,27 @@ export function Widget() {
               {others.map((w) => <Mini key={w.id} w={w} />)}
             </div>
           )}
-          <div className="w-section">
-            <span>Agents</span>
-            <span className="w-muted">{agents.filter((a) => a.status === "active").length} active</span>
-          </div>
-          {agents.length === 0 && <div className="w-muted w-pad">Nothing running right now.</div>}
-          {agents.slice(0, 6).map((a) => (
-            <div className="w-agent" key={`${a.source}|${a.sessionId}|${a.agentId}`}>
-              <span className={`status ${a.status}`} />
-              <div className="w-agent-body">
-                <div className="w-agent-title">
-                  <span>{a.project ? a.project.split("/").pop() : a.source}{a.agentId !== "main" ? ` › ${a.agentId}` : ""}</span>
-                  <span className="w-muted">{fmt.ago(a.lastSeen)}</span>
-                </div>
-                <div className="w-agent-act" title={a.lastActivity}>{a.lastActivity ?? "—"}</div>
-              </div>
+          <div className="glass">
+            <div className="w-section">
+              <span>Agents</span>
+              <span className="w-muted">{agents.filter((a) => a.status === "active").length} active</span>
             </div>
-          ))}
+            {agents.length === 0 && <div className="w-muted w-pad">Nothing running right now.</div>}
+            <div className="w-list">
+              {agents.slice(0, 6).map((a) => (
+                <div className="w-agent" key={`${a.source}|${a.sessionId}|${a.agentId}`}>
+                  <span className={`status ${a.status}`} />
+                  <div className="w-agent-body">
+                    <div className="w-agent-title">
+                      <span>{a.project ? a.project.split("/").pop() : a.source}{a.agentId !== "main" ? ` › ${a.agentId}` : ""}</span>
+                      <span className="w-muted">{fmt.ago(a.lastSeen)}</span>
+                    </div>
+                    <div className="w-agent-act" title={a.lastActivity}>{a.lastActivity ?? "—"}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
           <div className="w-foot">
             <span className={"live" + (live ? "" : " off")}>{live ? "live" : "reconnecting"}</span>
             <span className="w-muted">
@@ -72,7 +76,7 @@ function Primary({ w }: { w: WindowStatus }) {
   const left = w.fraction === null ? null : 1 - w.fraction;
   const cls = w.fraction === null ? "" : w.fraction >= 0.9 ? "crit" : w.fraction >= 0.7 ? "warn" : "";
   return (
-    <div className="w-primary">
+    <div className="glass w-primary">
       <div className="w-primary-top">
         <div>
           <div className="w-label">{w.label}</div>
@@ -81,7 +85,9 @@ function Primary({ w }: { w: WindowStatus }) {
         <div className="w-right">
           <div>resets in <b>{fmt.until(w.windowEnd)}</b></div>
           <div>{w.unit === "usd" ? fmt.usd(w.burnRatePerHour) : fmt.tokens(w.burnRatePerHour)}/h</div>
-          {w.projectedExhaustion && <div className="w-warn">runs out in {fmt.until(w.projectedExhaustion)}</div>}
+          {w.fraction !== null && w.fraction >= 1
+            ? <div className="w-warn">limit reached</div>
+            : w.projectedExhaustion && <div className="w-warn">runs out in {fmt.until(w.projectedExhaustion)}</div>}
         </div>
       </div>
       {w.fraction !== null ? (
@@ -96,7 +102,7 @@ function Primary({ w }: { w: WindowStatus }) {
 function Mini({ w }: { w: WindowStatus }) {
   const v = w.fraction === null ? (w.unit === "usd" ? fmt.usd(w.used) : fmt.tokens(w.used)) : fmt.pct(1 - w.fraction) + " left";
   return (
-    <div className="w-mini">
+    <div className="glass w-mini">
       <span className="w-muted">{w.label}</span>
       <b>{v}</b>
     </div>
