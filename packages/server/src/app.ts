@@ -86,6 +86,69 @@ export function createApp(collector: Collector, webDir: string) {
     });
   });
 
+  /**
+   * One-shot payload for the macOS WidgetKit widget.
+   *
+   * A widget extension gets a small, OS-budgeted number of refreshes per day,
+   * so it must never need more than one request: everything the small and the
+   * medium family can draw is here. Deliberately pre-formatted (labels, short
+   * strings) to keep the Swift side free of product decisions.
+   *
+   * Honesty rules the widget depends on:
+   * - `limit: null` means the user has not told us their cap. `fraction` is
+   *   then null and the widget shows tokens used, never an invented percent.
+   * - `estimate: true` is always set on windows: local logs cannot see usage
+   *   from other devices and providers do not publish remaining quota.
+   * - `unpriced` is true when any event in range used a model missing from the
+   *   pricing table, so the widget can mark cost as a floor, not a total.
+   */
+  app.get("/api/widget", (c) => {
+    const now = Date.now();
+    const windowEvents = store.events({ since: new Date(now - 8 * 24 * 3600000).toISOString() });
+    const windows = config.windows.map((w) => rollingWindow(windowEvents, w));
+    const recent = store.events({ since: new Date(now - 5 * 3600000).toISOString() });
+    const snapshots = buildAgentSnapshots(recent);
+    const rank: Record<string, number> = { active: 0, idle: 1, done: 2 };
+    const agents = [...snapshots]
+      .sort((a, b) => rank[a.status]! - rank[b.status]! || b.lastSeen.localeCompare(a.lastSeen))
+      .slice(0, 4)
+      .map((a) => ({
+        agentId: a.agentId,
+        label: a.project ? a.project.split("/").filter(Boolean).pop() ?? a.project : a.agentId,
+        model: a.model,
+        status: a.status,
+        activity: a.lastActivity ? truncate(a.lastActivity, 60) : null,
+        costUsd: a.costUsd,
+        unpriced: a.unpriced,
+        tokens: a.inputTokens + a.outputTokens + a.cacheReadTokens + a.cacheWriteTokens,
+        lastSeen: a.lastSeen,
+      }));
+    const day = store.totals({ since: new Date(now - 24 * 3600000).toISOString() });
+    return c.json({
+      generatedAt: new Date(now).toISOString(),
+      windows: windows.map((w) => ({
+        id: w.id,
+        label: w.label,
+        used: w.used,
+        limit: w.limit,
+        fraction: w.fraction,
+        unit: w.unit,
+        resetsAt: w.windowEnd,
+        projectedExhaustion: w.projectedExhaustion,
+        burnRatePerHour: w.burnRatePerHour,
+        /** Local logs are one device's view; never present this as measured quota. */
+        estimate: true,
+      })),
+      activeAgents: snapshots.filter((a) => a.status === "active").length,
+      agents,
+      day: {
+        tokens: day.inputTokens + day.outputTokens + day.cacheReadTokens + day.cacheWriteTokens,
+        costUsd: day.costUsd,
+        unpriced: day.unpricedEvents > 0,
+      },
+    });
+  });
+
   /** Server-sent events: one message per new/updated usage event, plus a heartbeat. */
   app.get("/api/stream", (c) =>
     streamSSE(c, async (stream) => {
@@ -111,6 +174,12 @@ export function createApp(collector: Collector, webDir: string) {
   });
 
   return app;
+}
+
+/** One line, markdown emphasis stripped: activity strings can be prompt excerpts. */
+function truncate(s: string, n: number): string {
+  const one = s.replace(/[*_`#>]+/g, "").replace(/\s+/g, " ").trim();
+  return one.length <= n ? one : one.slice(0, n - 1) + "\u2026";
 }
 
 function compact(n: number): string {
