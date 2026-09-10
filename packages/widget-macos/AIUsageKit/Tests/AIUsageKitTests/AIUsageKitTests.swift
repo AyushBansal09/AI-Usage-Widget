@@ -51,9 +51,10 @@ final class SnapshotDecodingTests: XCTestCase {
         let s = try fixture()
         let q = try XCTUnwrap(s.measured)
         XCTAssertEqual(q.id, "five_hour")
-        XCTAssertEqual(q.percentLeft, 38)
+        XCTAssertEqual(q.percentLeft, 80)
         XCTAssertEqual(q.severity, .ok)
-        XCTAssertEqual(Format.headline(for: q), "38% left")
+        XCTAssertEqual(Format.headline(for: q), "80% left")
+        XCTAssertNil(s.quota?.first { $0.id == "extra_usage" }?.resetsAt)
         XCTAssertTrue(Format.caveat(for: q).hasPrefix("Anthropic · "))
         XCTAssertEqual(s.account?.token, "ok")
     }

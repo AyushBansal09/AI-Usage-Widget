@@ -8,27 +8,38 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fixture = () => JSON.parse(readFileSync(join(here, "__fixtures__", "oauth-usage.json"), "utf8"));
 
 describe("parseUsageResponse", () => {
-  it("turns each utilization object into a QuotaWindow, 5h first", () => {
+  /** Real Pro-plan response: 5h and weekly windows, extra-usage spend, lots of nulls, one unknown key. */
+  it("turns each known utilization object into a QuotaWindow, 5h first", () => {
     const now = new Date("2026-09-10T18:00:00Z");
     const q = parseUsageResponse(fixture(), now);
-    expect(q.map((w) => w.id)).toEqual(["five_hour", "seven_day", "seven_day_opus"]);
+    expect(q.map((w) => w.id)).toEqual(["five_hour", "seven_day", "extra_usage"]);
     expect(q[0]).toEqual({
       id: "five_hour",
       label: "Claude 5-hour window",
       provider: "anthropic",
-      fraction: 0.62,
-      resetsAt: "2026-09-10T21:00:00.000Z",
+      fraction: 0.2,
+      // microsecond timestamps normalise to ms ISO
+      resetsAt: "2026-09-10T19:50:00.192Z",
       measuredAt: now.toISOString(),
     });
-    // unknown keys get a humanised label, never a guessed meaning
-    expect(q[2].label).toBe("Claude weekly (Opus)");
+    expect(q[1].fraction).toBe(0.07);
+    expect(q[2]).toMatchObject({ label: "Extra usage (spend cap)", fraction: 0.393, resetsAt: null });
   });
 
-  it("ignores non-window keys and clamps", () => {
-    const q = parseUsageResponse({ five_hour: { utilization: 140, resets_at: null }, extra_usage: { enabled: false }, note: "x" });
-    expect(q).toHaveLength(1);
+  it("drops null windows and keys it has no label for (nimbus_quill, limits, spend)", () => {
+    const ids = parseUsageResponse(fixture()).map((w) => w.id);
+    expect(ids).not.toContain("nimbus_quill");
+    expect(ids).not.toContain("seven_day_opus");
+    expect(ids).not.toContain("limits");
+    expect(ids).not.toContain("spend");
+  });
+
+  it("labels per-model weekly windows when a plan has them, and clamps", () => {
+    const q = parseUsageResponse({ five_hour: { utilization: 140, resets_at: null }, seven_day_opus: { utilization: 9 }, note: "x" });
+    expect(q.map((w) => w.id)).toEqual(["five_hour", "seven_day_opus"]);
     expect(q[0].fraction).toBe(1);
     expect(q[0].resetsAt).toBeNull();
+    expect(q[1].label).toBe("Claude weekly (Opus)");
   });
 
   it("accepts a 0..1 ratio as well as a percent", () => {
@@ -89,7 +100,7 @@ describe("AnthropicAccount", () => {
     expect(seen["anthropic-beta"]).toBe("oauth-2025-04-20");
     expect(s.token).toBe("ok");
     expect(s.lastFetch).toBe("2026-09-10T18:00:00.000Z");
-    expect(s.quota[0].fraction).toBe(0.62);
+    expect(s.quota[0].fraction).toBe(0.2);
     expect(JSON.stringify(s)).not.toContain("SECRET");
   });
 

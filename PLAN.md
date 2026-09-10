@@ -102,10 +102,12 @@ tokens — across whichever AI tools you use day to day.
    to the local estimate. Keys stored in the OS keychain, never in config.
    *(Done for the common case without any key: `connect claude` reads the
    account's 5h/7d utilisation via Claude Code's own login — see
-   `packages/server/src/providers/anthropic-account.ts`. Still to do: the
-   fixture is synthetic until a real `connect claude` run replaces it; a
-   `seven_day_opus`-style per-model window in the widget's medium family;
-   the Admin API path for org spend; OpenAI's equivalent for Codex.)*
+   `packages/server/src/providers/anthropic-account.ts`, fixture captured from
+   a real Pro account with `connect claude --raw`. Verified live: the local
+   estimate said 41% left; the account said 80%. Still to do: per-model weekly
+   windows (`seven_day_opus` etc., null on Pro) in the widget's medium family;
+   the response's `limits[]` array as a forward-compatible source; the Admin
+   API path for org spend; OpenAI's equivalent for Codex.)*
 3. **API proxy adapter**: `ai-usage-widget proxy` exposes a local
    OpenAI/Anthropic-compatible endpoint that forwards requests and records
    usage from responses, so people's own scripts and agent frameworks show up

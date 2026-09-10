@@ -27,11 +27,19 @@ const USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const OAUTH_BETA = "oauth-2025-04-20";
 const KEYCHAIN_SERVICE = "Claude Code-credentials";
 
+/**
+ * Keys we understand. Anything else in the response is kept out of the UI:
+ * a real account answers with keys like `nimbus_quill` (0%, no reset) whose
+ * meaning we do not know, and "nimbus quill 100% left" in a widget would be
+ * noise dressed up as information.
+ */
 const LABELS: Record<string, string> = {
   five_hour: "Claude 5-hour window",
   seven_day: "Claude weekly cap",
   seven_day_opus: "Claude weekly (Opus)",
   seven_day_sonnet: "Claude weekly (Sonnet)",
+  /** Share of the pay-as-you-go extra-usage cap spent; not a rolling window. */
+  extra_usage: "Extra usage (spend cap)",
 };
 
 const execFileP = promisify(execFile);
@@ -88,15 +96,15 @@ export async function readCredential(): Promise<Credential | null> {
 /**
  * The usage endpoint answers with one object per window, e.g.
  * `{ five_hour: { utilization: 62, resets_at: "..." }, seven_day: {...}, ... }`.
- * Parsed defensively: any top-level object with a numeric `utilization`
- * becomes a window; anything else is ignored, so new keys on Anthropic's side
- * neither break us nor get invented labels beyond a humanised key.
+ * Parsed defensively: a top-level object with a numeric `utilization` and a
+ * key we have a label for becomes a window; anything else is ignored, so new
+ * keys on Anthropic's side neither break us nor get invented meanings.
  */
 export function parseUsageResponse(body: unknown, now: Date = new Date()): QuotaWindow[] {
   if (!body || typeof body !== "object") return [];
   const out: QuotaWindow[] = [];
   for (const [key, v] of Object.entries(body as Record<string, unknown>)) {
-    if (!v || typeof v !== "object") continue;
+    if (!v || typeof v !== "object" || !(key in LABELS)) continue;
     const u = (v as any).utilization;
     if (typeof u !== "number" || !Number.isFinite(u)) continue;
     // Percent (0..100) in observed responses; accept a 0..1 ratio too.
@@ -105,7 +113,7 @@ export function parseUsageResponse(body: unknown, now: Date = new Date()): Quota
     const resetsAt = typeof r === "string" && Number.isFinite(Date.parse(r)) ? new Date(r).toISOString() : null;
     out.push({
       id: key,
-      label: LABELS[key] ?? key.replace(/_/g, " "),
+      label: LABELS[key]!,
       provider: "anthropic",
       fraction,
       resetsAt,
@@ -130,6 +138,8 @@ export class AnthropicAccount {
   private timer: NodeJS.Timeout | null = null;
   private readonly opts: Required<AnthropicAccountOptions>;
   status: AccountStatus;
+  /** Last response body, in memory only, for `connect claude --raw` (fixture capture). Token-free by nature. */
+  lastRaw: unknown = null;
   private listeners = new Set<(s: AccountStatus) => void>();
 
   constructor(opts: AnthropicAccountOptions) {
@@ -202,7 +212,9 @@ export class AnthropicAccount {
         this.set({ credential: cred.from, token: "ok", subscription: cred.subscription, lastError: `Usage endpoint returned HTTP ${res.status}.` });
         return this.status;
       }
-      const quota = parseUsageResponse(await res.json(), now);
+      const body = await res.json();
+      this.lastRaw = body;
+      const quota = parseUsageResponse(body, now);
       this.set({
         credential: cred.from, token: "ok", subscription: cred.subscription,
         lastFetch: now.toISOString(), lastError: quota.length ? null : "Usage endpoint answered, but with no windows we recognise.",

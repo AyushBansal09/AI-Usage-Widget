@@ -74,6 +74,11 @@ async function main() {
         console.error(`✘ ${s.lastError}`);
         process.exit(1);
       }
+      if (flags.has("--raw")) {
+        // The response body as received. Contains utilisation only, never a
+        // token; this is how the test fixture is captured.
+        console.log(JSON.stringify(acct.lastRaw, null, 2));
+      }
       cfg.providers.anthropicAccount.enabled = true;
       saveConfig(cfg);
       console.log(`✔ Connected to your Claude account via Claude Code's login (${s.credential}${s.subscription ? `, ${s.subscription} plan` : ""}).`);
