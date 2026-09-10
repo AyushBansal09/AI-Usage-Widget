@@ -88,3 +88,27 @@ tr:last-child td { border-bottom: 0; }
 .sources { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--ink-2); }
 .sources span { border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; background: var(--surface); }
 .sources span.off { color: var(--muted); text-decoration: line-through; }
+
+/* ---- compact widget view (menu bar popover) ---- */
+html[data-view="widget"] body { background: var(--surface); overflow: hidden; user-select: none; }
+.widget { width: 100%; max-width: 360px; padding: 12px 14px 10px; font-size: 13px; }
+.w-primary { padding-bottom: 10px; border-bottom: 1px solid var(--grid); }
+.w-primary-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.w-label { color: var(--ink-2); font-size: 12px; }
+.w-hero { font-size: 28px; font-weight: 600; line-height: 1.15; }
+.w-right { text-align: right; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.w-warn { color: var(--critical); font-weight: 600; }
+.w-others { display: flex; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--grid); }
+.w-mini { flex: 1; display: flex; flex-direction: column; font-size: 12px; }
+.w-section { display: flex; justify-content: space-between; margin: 10px 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-2); }
+.w-muted { color: var(--muted); font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.w-pad { padding: 6px 0 8px; }
+.w-agent { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; }
+.w-agent .status { margin-top: 5px; }
+.w-agent-body { min-width: 0; flex: 1; }
+.w-agent-title { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; font-size: 12px; }
+.w-agent-act { color: var(--ink-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.w-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--grid); font-size: 12px; }
+.w-foot a { color: var(--series-1); text-decoration: none; }
+.w-err { background: color-mix(in srgb, var(--critical) 12%, transparent); color: var(--ink); padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 8px; }
+.w-err code { font-family: ui-monospace, Menlo, monospace; }

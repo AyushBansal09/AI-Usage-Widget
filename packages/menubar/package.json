@@ -1,0 +1,20 @@
+{
+  "name": "@ai-usage-widget/menubar",
+  "version": "0.0.1",
+  "private": true,
+  "description": "macOS menu bar widget (Tauri). Shows % of your Claude window left in the menu bar; click for the compact popover.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "echo 'menubar: run `pnpm --filter @ai-usage-widget/menubar bundle` on macOS to build the .app'",
+    "bundle": "tauri build",
+    "check": "cd src-tauri && cargo check",
+    "typecheck": "echo 'menubar: no TS'",
+    "test": "cd src-tauri && cargo test"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}

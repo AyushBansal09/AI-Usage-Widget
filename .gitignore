@@ -6,3 +6,6 @@ dist/
 .env
 .env.*
 # local runtime data (SQLite db, config) lives in ~/.ai-usage-widget, never in the repo
+packages/menubar/src-tauri/target/
+packages/menubar/src-tauri/gen/
+packages/server/public/

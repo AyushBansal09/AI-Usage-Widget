@@ -1,6 +1,6 @@
 # ai-usage-widget — plan
 
-Goal: an open-source, local-first dashboard that shows how many tokens you have
+Goal: an open-source, local-first menu bar widget (backed by a dashboard) that shows how many tokens you have
 left, what each of your AI agents is working on, and how efficiently they use
 tokens — across whichever AI tools you use day to day.
 
@@ -39,6 +39,12 @@ tokens — across whichever AI tools you use day to day.
 - `@ai-usage-widget/server`: Collector, Hono API (`/api/summary`, `/api/agents`,
   `/api/timeline`, `/api/events`, `/api/stream` SSE), CLI (`serve`, `doctor`,
   `backfill`, `agents`).
+- `@ai-usage-widget/menubar`: Tauri 2 tray app. Tray title comes from
+  `/api/tray`; left-click toggles a frameless always-on-top popover positioned
+  under the tray that loads `/widget`; right-click menu has Open dashboard /
+  Refresh / Quit; hides on blur; runs as an Accessory app (no Dock icon);
+  spawns the collector if it is not running. Compiles on Linux; first macOS
+  run pending.
 - `@ai-usage-widget/web`: React dashboard — tokens-left cards, efficiency tiles,
   stacked timeline with hover, agents table, by-model table, sources. Light and
   dark themes. Live via SSE.
@@ -53,7 +59,7 @@ tokens — across whichever AI tools you use day to day.
 3. Subagent tree in the agents table (parent → children, collapsed by default).
 4. Per-session drill-down page: turn-by-turn context growth, tool mix, and a
    "why is this expensive" panel (largest context jumps, retried tools).
-5. Menubar/tray mode (`ai-usage-widget --tray`) showing % of window left.
+5. Menu bar widget polish: first run on macOS, notarised .dmg via GitHub Actions, launch-at-login, notification when a window crosses 80%/95%.
 6. `npm publish` as a single `ai-usage-widget` package; GitHub Actions for
    typecheck + tests on macOS/Linux/Windows.
 
@@ -95,7 +101,7 @@ location (GitHub repo). Still open:
 2. Which Claude plan does Ayush use, and what limit does `/usage` show? Needed to
    calibrate the default window `limit` and to sanity-check the "all tokens"
    counting rule against Anthropic's meter.
-3. Do we want a menubar app early (Tauri) or stay browser-only until Phase 2?
+3. (Answered: the menu bar widget is the primary surface; the dashboard is the drill-down.)
 4. Where should scrubbed fixture transcripts come from — Ayush's own sessions
    (fast) or synthetic ones (safer for a public repo)?
 5. License stays MIT?

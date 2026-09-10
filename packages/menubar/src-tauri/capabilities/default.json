@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Popover window: no IPC needed beyond core (the UI is plain HTTP to the local collector).",
+  "windows": ["popover"],
+  "permissions": ["core:default", "positioner:default", "opener:default"]
+}

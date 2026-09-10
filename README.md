@@ -1,7 +1,10 @@
-# ai-usage-widget
+# AI Usage Widget
 
-A local-first dashboard for people who run AI coding agents all day. Connect the
-tools you already use and see, in one place:
+A macOS menu bar widget (plus a local dashboard) for people who run AI coding
+agents all day. The menu bar shows how much of your Claude window is left and
+how many agents are active; click it for burn rate, time-to-exhaustion, and
+what each agent is doing right now. Connect the tools you already use and see,
+in one place:
 
 - **Tokens left** — your Claude 5-hour and weekly windows (estimated from local
   logs, the same way `ccusage` does it), plus any daily/weekly/monthly budgets
@@ -25,6 +28,7 @@ Early foundation. Working today:
 | Codex CLI adapter (`~/.codex/sessions`) | Skeleton from the documented format; needs a real rollout fixture |
 | Rolling windows, budgets, efficiency metrics | Working, unit-tested |
 | Dashboard (React, SSE live updates, light/dark) | Working |
+| Menu bar widget (Tauri, macOS) | Built and compile-checked; needs a first `tauri build` run on a Mac |
 | Cursor / Windsurf / Copilot | Not started (see plan) |
 | API-key proxy for your own scripts | Not started (see plan) |
 | Provider usage APIs (Anthropic / OpenAI admin) | Not started (see plan) |
@@ -53,6 +57,25 @@ Development (server with hot reload on 4321, Vite dashboard on 5173 proxying `/a
 pnpm dev                              # terminal 1
 pnpm --filter @ai-usage-widget/web dev  # terminal 2
 ```
+
+## Menu bar widget (macOS)
+
+The widget is a small Tauri app in `packages/menubar`. It draws a tray item
+(`33% · 2` = window left, active agents), and clicking it opens a popover that
+loads the compact `/widget` view from the local collector, so the dashboard and
+the widget are one React codebase. It starts the collector itself if nothing is
+listening on the port (looks for a global `ai-usage-widget` install; override
+with `AI_USAGE_WIDGET_BIN`, port with `AI_USAGE_WIDGET_PORT`).
+
+```bash
+# prerequisites: Rust (https://rustup.rs) and Xcode command line tools
+pnpm build                                          # dashboard + collector
+npm link ./packages/server                          # puts `ai-usage-widget` on PATH for the widget to spawn
+pnpm --filter @ai-usage-widget/menubar dev          # run it
+pnpm --filter @ai-usage-widget/menubar bundle       # .app + .dmg in packages/menubar/src-tauri/target/release/bundle
+```
+
+Right-click the tray item for *Open dashboard*, *Refresh now*, *Quit*.
 
 ## Configuration
 
@@ -86,7 +109,8 @@ packages/
   adapter-claude-code/  Transcript parser + offset-based tailer
   adapter-codex/        Rollout parser (skeleton)
   server/               Collector (adapters -> store), Hono API + SSE, CLI, serves the built dashboard
-  web/                  React dashboard, builds into server/public
+  web/                  React dashboard + compact /widget view, builds into server/public
+  menubar/              Tauri menu bar app: tray title from /api/tray, popover loads /widget
 ```
 
 An adapter implements three methods — `detect()`, `backfill(emit)`,

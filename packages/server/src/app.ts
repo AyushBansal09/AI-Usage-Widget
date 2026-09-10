@@ -60,6 +60,32 @@ export function createApp(collector: Collector, webDir: string) {
 
   app.get("/api/config", (c) => c.json(config));
 
+  /**
+   * Tiny payload for the menu bar widget's tray title. Keeps the native side
+   * dumb: it just polls this and paints `title`.
+   */
+  app.get("/api/tray", (c) => {
+    const windowEvents = store.events({ since: new Date(Date.now() - 8 * 24 * 3600000).toISOString() });
+    const primary = config.windows[0] ? rollingWindow(windowEvents, config.windows[0]) : null;
+    const agents = buildAgentSnapshots(store.events({ since: new Date(Date.now() - 5 * 3600000).toISOString() }));
+    const active = agents.filter((a) => a.status === "active").length;
+    let title: string;
+    if (!primary) title = "—";
+    else if (primary.fraction !== null) title = `${Math.round((1 - primary.fraction) * 100)}%`;
+    else title = compact(primary.used);
+    if (active) title += ` · ${active}`;
+    return c.json({
+      title,
+      fractionUsed: primary?.fraction ?? null,
+      used: primary?.used ?? 0,
+      limit: primary?.limit ?? null,
+      resetsAt: primary?.windowEnd ?? null,
+      projectedExhaustion: primary?.projectedExhaustion ?? null,
+      activeAgents: active,
+      severity: primary?.fraction === null || primary === null ? "none" : primary.fraction >= 0.9 ? "critical" : primary.fraction >= 0.7 ? "warning" : "ok",
+    });
+  });
+
   /** Server-sent events: one message per new/updated usage event, plus a heartbeat. */
   app.get("/api/stream", (c) =>
     streamSSE(c, async (stream) => {
@@ -85,6 +111,12 @@ export function createApp(collector: Collector, webDir: string) {
   });
 
   return app;
+}
+
+function compact(n: number): string {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+  if (n >= 1e3) return Math.round(n / 1e3) + "k";
+  return String(n);
 }
 
 function byKey<T extends { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; costUsd: number | null }>(
