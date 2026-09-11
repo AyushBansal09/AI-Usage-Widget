@@ -31,12 +31,10 @@ public struct WidgetSnapshot: Codable, Equatable, Sendable {
     /// The window the tray title is built from: the first configured one.
     public var primary: UsageWindow? { windows.first }
 
-    /// The account's own 5-hour number when the account link is on. Wins over
-    /// `primary` in every view, because it is measured rather than inferred.
-    public var measured: QuotaWindow? {
-        guard let q = quota, !q.isEmpty else { return nil }
-        return q.first { $0.id == "five_hour" } ?? q.first
-    }
+    /// The first measured window (the server orders them: Anthropic's 5-hour
+    /// first, then other providers). Wins over `primary` in every view,
+    /// because it is measured rather than inferred.
+    public var measured: QuotaWindow? { quota?.first }
 }
 
 /// A provider-measured window. No `limit`/`used`: the provider only tells us the ratio.
@@ -68,12 +66,15 @@ public struct QuotaWindow: Codable, Equatable, Sendable, Identifiable {
 }
 
 public struct AccountInfo: Codable, Equatable, Sendable {
+    /// Which link the headline comes from ("anthropic", "cursor", …). Optional for older collectors.
+    public var provider: String?
     public var enabled: Bool
     /// "ok" | "expired" | "missing"
     public var token: String
     public var lastFetch: Date?
 
-    public init(enabled: Bool, token: String, lastFetch: Date?) {
+    public init(provider: String? = nil, enabled: Bool, token: String, lastFetch: Date?) {
+        self.provider = provider
         self.enabled = enabled
         self.token = token
         self.lastFetch = lastFetch

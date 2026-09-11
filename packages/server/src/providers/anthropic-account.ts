@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { AccountStatus, QuotaWindow } from "@ai-usage-widget/core";
+import type { AccountLink } from "./account-link.js";
 
 /**
  * Reads the account's real rolling-window usage from Anthropic, using the
@@ -134,7 +135,8 @@ export interface AnthropicAccountOptions {
   now?: () => Date;
 }
 
-export class AnthropicAccount {
+export class AnthropicAccount implements AccountLink {
+  readonly provider = "anthropic";
   private timer: NodeJS.Timeout | null = null;
   private readonly opts: Required<AnthropicAccountOptions>;
   status: AccountStatus;

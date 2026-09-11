@@ -105,16 +105,25 @@ importers:
       '@ai-usage-widget/adapter-codex':
         specifier: workspace:*
         version: link:../adapter-codex
+      '@ai-usage-widget/adapter-cursor':
+        specifier: workspace:*
+        version: link:../adapter-cursor
       '@ai-usage-widget/core':
         specifier: workspace:*
         version: link:../core
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.17(hono@4.13.7)
+      better-sqlite3:
+        specifier: ^11.7.0
+        version: 11.10.0
       hono:
         specifier: ^4.6.0
         version: 4.13.7
     devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.12
+        version: 7.6.13
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.2

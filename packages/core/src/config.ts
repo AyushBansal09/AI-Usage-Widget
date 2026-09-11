@@ -74,6 +74,17 @@ export const ConfigSchema = z.object({
           pollSeconds: z.number().int().min(30).default(120),
         })
         .default({}),
+      /**
+       * Reuse Cursor's own login (the access token in its state.vscdb) to read
+       * the plan's request quota from cursor.com. Same rules: read-only,
+       * never refreshed, off until `connect cursor`.
+       */
+      cursorAccount: z
+        .object({
+          enabled: z.boolean().default(false),
+          pollSeconds: z.number().int().min(60).default(600),
+        })
+        .default({}),
     })
     .default({}),
 });

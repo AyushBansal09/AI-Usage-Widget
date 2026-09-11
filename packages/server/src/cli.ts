@@ -7,6 +7,24 @@ import { Collector } from "./collector.js";
 import { createApp } from "./app.js";
 import { buildAgentSnapshots, loadConfig, saveConfig, configPath } from "@ai-usage-widget/core";
 import { AnthropicAccount, credentialsFilePath } from "./providers/anthropic-account.js";
+import { CursorAccount, defaultCursorDb } from "./providers/cursor-account.js";
+import type { AccountLink } from "./providers/account-link.js";
+
+/** `connect <name>` / `disconnect <name>`: how each link is built and where its login lives. */
+const LINKS: Record<string, { key: "anthropicAccount" | "cursorAccount"; label: string; make: (o: { enabled: boolean; pollSeconds: number }) => AccountLink; where: () => string; signIn: string }> = {
+  claude: {
+    key: "anthropicAccount", label: "Claude account",
+    make: (o) => new AnthropicAccount(o),
+    where: () => `the macOS Keychain "Claude Code-credentials" or ${credentialsFilePath()}`,
+    signIn: "Run `claude`, sign in, then try again.",
+  },
+  cursor: {
+    key: "cursorAccount", label: "Cursor account",
+    make: (o) => new CursorAccount(o),
+    where: () => defaultCursorDb(),
+    signIn: "Open Cursor, sign in, then try again.",
+  },
+};
 
 const here = dirname(fileURLToPath(import.meta.url));
 const WEB_DIR = join(here, "..", "public");
@@ -43,58 +61,59 @@ async function main() {
         const d = await a.detect();
         console.log(`${d.available ? "✔" : "✘"} ${a.name}  ${d.location ?? ""} ${d.reason ?? ""}`);
       }
-      const acct = collector.config.providers.anthropicAccount;
-      if (acct.enabled) {
-        const s = await collector.account.refresh();
-        console.log(`${s.token === "ok" && !s.lastError ? "✔" : "✘"} claude account  ${describeAccount(s)}`);
-      } else {
-        console.log(`· claude account  off (run \`ai-usage-widget connect claude\` to show real quota)`);
+      for (const [name, link] of Object.entries(LINKS)) {
+        const acct = collector.account(link.make({ enabled: false, pollSeconds: 60 }).provider);
+        if (acct?.status.enabled) {
+          const s = await acct.refresh();
+          console.log(`${s.token === "ok" && !s.lastError ? "✔" : "✘"} ${name} account  ${describeAccount(s)}`);
+        } else {
+          console.log(`· ${name} account  off (run \`ai-usage-widget connect ${name}\` to show real quota)`);
+        }
       }
       collector.stop();
       break;
     }
     case "connect": {
-      // `connect claude`: reuse Claude Code's login to read the account's real
-      // quota. One test fetch first, so the config is only switched on when it
-      // actually works. Prints percentages, never the token.
-      if (rest[0] !== "claude") return usage();
+      // `connect claude|cursor`: reuse a login the user already has to read
+      // the account's real quota. One test fetch first, so the config is only
+      // switched on when it actually works. Prints percentages, never a token.
+      const link = LINKS[rest[0] ?? ""];
+      if (!link) return usage();
       const cfg = loadConfig();
-      const acct = new AnthropicAccount({ ...cfg.providers.anthropicAccount, enabled: true });
+      const acct = link.make({ ...cfg.providers[link.key], enabled: true });
       const s = await acct.refresh();
       if (s.token === "missing") {
-        console.error(`✘ No Claude Code login found (looked in the macOS Keychain "Claude Code-credentials" and ${credentialsFilePath()}).`);
-        console.error(`  Run \`claude\`, sign in, then try again.`);
+        console.error(`✘ No ${link.label} login found (looked in ${link.where()}).`);
+        console.error(`  ${link.signIn}`);
         process.exit(1);
       }
-      if (s.token === "expired") {
+      if (s.token === "expired" || s.lastError) {
         console.error(`✘ ${s.lastError}`);
-        process.exit(1);
-      }
-      if (s.lastError) {
-        console.error(`✘ ${s.lastError}`);
+        if (flags.has("--raw") && acct.lastRaw) console.log(JSON.stringify(acct.lastRaw, null, 2));
         process.exit(1);
       }
       if (flags.has("--raw")) {
-        // The response body as received. Contains utilisation only, never a
-        // token; this is how the test fixture is captured.
+        // The response body as received. Contains usage only, never a token;
+        // this is how test fixtures are captured.
         console.log(JSON.stringify(acct.lastRaw, null, 2));
       }
-      cfg.providers.anthropicAccount.enabled = true;
+      cfg.providers[link.key].enabled = true;
       saveConfig(cfg);
-      console.log(`✔ Connected to your Claude account via Claude Code's login (${s.credential}${s.subscription ? `, ${s.subscription} plan` : ""}).`);
+      console.log(`✔ Connected to your ${link.label} via its existing login (${s.credential}${s.subscription ? `, ${s.subscription} plan` : ""}).`);
       for (const w of s.quota) {
-        console.log(`  ${w.label.padEnd(24)} ${Math.round(w.fraction * 100)}% used${w.resetsAt ? `, resets ${w.resetsAt}` : ""}`);
+        console.log(`  ${w.label.padEnd(26)} ${Math.round(w.fraction * 100)}% used${w.resetsAt ? `, resets ${w.resetsAt}` : ""}`);
       }
-      console.log(`\nSaved to ${configPath()}. The collector polls every ${cfg.providers.anthropicAccount.pollSeconds}s; restart \`serve\` (or the menu bar app) to pick it up.`);
-      console.log(`Undo with \`ai-usage-widget disconnect claude\`.`);
+      console.log(`\nSaved to ${configPath()}. The collector polls every ${cfg.providers[link.key].pollSeconds}s; restart \`serve\` (or the menu bar app) to pick it up.`);
+      console.log(`Undo with \`ai-usage-widget disconnect ${rest[0]}\`.`);
       break;
     }
     case "disconnect": {
-      if (rest[0] !== "claude") return usage();
+      const link = LINKS[rest[0] ?? ""];
+      if (!link) return usage();
       const cfg = loadConfig();
-      cfg.providers.anthropicAccount.enabled = false;
+      cfg.providers[link.key].enabled = false;
       saveConfig(cfg);
-      console.log(`✔ Claude account link off. Nothing was stored; the widget is back to local estimates.`);
+      console.log(`✔ ${link.label} link off. Nothing was stored; the widget is back to local estimates.`);
       break;
     }
     case "agents": {
@@ -113,7 +132,7 @@ async function main() {
 }
 
 function usage(): never {
-  console.error(`Usage: ai-usage-widget [serve|backfill|doctor|agents|connect claude|disconnect claude] [--port=4321] [--no-open]`);
+  console.error(`Usage: ai-usage-widget [serve|backfill|doctor|agents|connect <claude|cursor>|disconnect <claude|cursor>] [--port=4321] [--no-open] [--raw]`);
   process.exit(1);
 }
 

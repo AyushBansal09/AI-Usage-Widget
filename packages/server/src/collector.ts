@@ -3,6 +3,9 @@ import { ClaudeCodeAdapter } from "@ai-usage-widget/adapter-claude-code";
 import { CodexAdapter } from "@ai-usage-widget/adapter-codex";
 import { CursorAdapter } from "@ai-usage-widget/adapter-cursor";
 import { AnthropicAccount } from "./providers/anthropic-account.js";
+import { CursorAccount } from "./providers/cursor-account.js";
+import type { AccountLink } from "./providers/account-link.js";
+import type { AccountStatus, QuotaWindow } from "@ai-usage-widget/core";
 
 export interface SourceStatus extends AdapterDetection {
   name: string;
@@ -17,14 +20,17 @@ export class Collector {
   readonly config: Config;
   readonly store: EventStore;
   readonly adapters: Adapter[];
-  /** Optional, opt-in: the account's real quota from Anthropic. */
-  readonly account: AnthropicAccount;
+  /** Optional, opt-in provider-account links (real quota, not estimates). */
+  readonly accounts: AccountLink[];
   private stops: Array<() => void> = [];
   private detections = new Map<string, AdapterDetection>();
 
   constructor(opts: { config?: Config; storePath?: string; adapters?: Adapter[] } = {}) {
     this.config = opts.config ?? loadConfig();
-    this.account = new AnthropicAccount(this.config.providers.anthropicAccount);
+    this.accounts = [
+      new AnthropicAccount(this.config.providers.anthropicAccount),
+      new CursorAccount(this.config.providers.cursorAccount),
+    ];
     this.store = new EventStore(opts.storePath ?? dbPath(), new PricingTable(this.config.pricing));
     this.adapters = opts.adapters ?? [
       new ClaudeCodeAdapter({
@@ -57,9 +63,31 @@ export class Collector {
       if (opts.watch) this.stops.push(await a.watch(emit));
     }
     if (opts.watch) {
-      this.account.start();
-      this.stops.push(() => this.account.stop());
+      for (const a of this.accounts) {
+        a.start();
+        this.stops.push(() => a.stop());
+      }
     }
+  }
+
+  account(provider: string): AccountLink | undefined {
+    return this.accounts.find((a) => a.provider === provider);
+  }
+
+  accountStatuses(): AccountStatus[] {
+    return this.accounts.map((a) => a.status);
+  }
+
+  /** Every measured window from every enabled link, Anthropic's 5h first. */
+  quota(): QuotaWindow[] {
+    const all = this.accounts.flatMap((a) => a.status.quota);
+    const rank = (q: QuotaWindow) => (q.provider === "anthropic" && q.id === "five_hour" ? 0 : q.provider === "anthropic" ? 1 : 2);
+    return all.sort((a, b) => rank(a) - rank(b));
+  }
+
+  /** The window the tray title is built from, when any link is on. */
+  primaryQuota(): QuotaWindow | null {
+    return this.quota()[0] ?? null;
   }
 
   sources(): SourceStatus[] {

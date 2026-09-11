@@ -26,21 +26,23 @@ export function Widget() {
   // The account's own numbers (via `connect claude`) take the hero slot when
   // present; local estimates drop to the mini row so both stay visible but
   // are never confused for each other.
-  const quota = summary?.quota ?? [];
-  const measured = quota.find((q) => q.id === "five_hour") ?? quota[0] ?? null;
+  const quota = summary?.quota ?? []; // server orders these: Anthropic 5h first
+  const measured = quota[0] ?? null;
+  const measuredAccount = measured ? summary?.accounts?.find((a) => a.provider === measured.provider) : undefined;
   const primary = measured ? null : summary?.windows[0] ?? null;
   const others = summary ? [...(measured ? summary.windows : summary.windows.slice(1)), ...summary.budgets] : [];
   const otherQuota = quota.filter((q) => q !== measured);
+  const unhealthy = (summary?.accounts ?? []).filter((a) => a.enabled && a.token !== "ok");
 
   return (
     <div className="widget">
       {err && <div className="w-err">Collector not reachable. Start it with <code>ai-usage-widget serve</code>.</div>}
       {summary && (
         <>
-          {measured ? <Measured q={measured} account={summary.account} /> : primary ? <Primary w={primary} /> : <div className="w-err">No window configured.</div>}
-          {summary.account?.enabled && summary.account.token !== "ok" && (
-            <div className="w-err">{summary.account.lastError ?? "Claude account link needs attention."}</div>
-          )}
+          {measured ? <Measured q={measured} account={measuredAccount} /> : primary ? <Primary w={primary} /> : <div className="w-err">No window configured.</div>}
+          {unhealthy.map((a) => (
+            <div className="w-err" key={a.provider}>{a.lastError ?? `${a.provider} account link needs attention.`}</div>
+          ))}
           {(others.length > 0 || otherQuota.length > 0) && (
             <div className="w-others">
               {otherQuota.map((q) => <MiniQuota key={q.id} q={q} />)}
@@ -110,7 +112,7 @@ function Primary({ w }: { w: WindowStatus }) {
 }
 
 /** Hero card for a provider-measured window: no burn rate or projection, those are ours, not theirs. */
-function Measured({ q, account }: { q: Summary["quota"][number]; account: Summary["account"] }) {
+function Measured({ q, account }: { q: Summary["quota"][number]; account: Summary["accounts"][number] | undefined }) {
   const cls = q.fraction >= 0.9 ? "crit" : q.fraction >= 0.7 ? "warn" : "";
   return (
     <div className="glass w-primary">
@@ -121,7 +123,7 @@ function Measured({ q, account }: { q: Summary["quota"][number]; account: Summar
         </div>
         <div className="w-right">
           {q.resetsAt && <div>resets in <b>{fmt.until(q.resetsAt)}</b></div>}
-          <div className="w-muted">Anthropic · {fmt.ago(q.measuredAt)}{account?.subscription ? ` · ${account.subscription}` : ""}</div>
+          <div className="w-muted">{q.provider.charAt(0).toUpperCase() + q.provider.slice(1)} · {fmt.ago(q.measuredAt)}{account?.subscription ? ` · ${account.subscription}` : ""}</div>
           {q.fraction >= 1 && <div className="w-warn">limit reached</div>}
         </div>
       </div>
