@@ -147,9 +147,18 @@ made-up percentage.
 ## ChatGPT / Codex CLI
 
 There is no local log for ChatGPT itself. The way in is the Codex CLI
-(`npm i -g @openai/codex`, then `codex login` with your ChatGPT account): its
-session logs under `~/.codex/sessions` carry both token usage and your plan's
-rate-limit windows, so ChatGPT quota needs no extra network call.
+(`npm i -g @openai/codex`, then `codex login` with your ChatGPT account). Its
+rollouts under `~/.codex/sessions` are read like Claude Code's transcripts:
+one event per API response, keyed by OpenAI's `response_id`, with cached
+input split out so totals never double count (`input − cached + output` is
+exactly the "tokens used" Codex prints).
+
+The same rollouts carry your plan's **rate limits** (`plan_type`, window
+length, `used_percent`, `resets_at`), so ChatGPT quota shows up as a measured
+window — "ChatGPT Codex 30-day window · 0% used" — with **no network call**.
+It is on by default (`providers.codexAccount`) because it only reads local
+files; the number is as fresh as your last Codex turn and is captioned with
+that time. Validated against Codex CLI 0.154 with a scrubbed real rollout.
 
 ## Configuration
 
@@ -172,7 +181,8 @@ percentage — providers do not expose exact quotas, so this is your own estimat
   "adapters": {},
   "providers": {
     "anthropicAccount": { "enabled": false, "pollSeconds": 120 },
-    "cursorAccount": { "enabled": false, "pollSeconds": 600 }
+    "cursorAccount": { "enabled": false, "pollSeconds": 600 },
+    "codexAccount": { "enabled": true, "pollSeconds": 30 }
   }
 }
 ```
@@ -186,7 +196,7 @@ Unknown models are shown as **unpriced** rather than $0; add them under
 packages/
   core/                 UsageEvent schema, SQLite store, pricing, aggregation (windows, budgets, efficiency)
   adapter-claude-code/  Transcript parser + offset-based tailer
-  adapter-codex/        Rollout parser (skeleton)
+  adapter-codex/        Codex CLI rollout parser (token_usage_record + rate_limits), validated on 0.154
   adapter-cursor/       Cursor state.vscdb reader: agent steps, tool calls, token counts where recorded
   server/               Collector (adapters -> store), Hono API + SSE, CLI, serves the built dashboard
   web/                  React dashboard + compact /widget view, builds into server/public

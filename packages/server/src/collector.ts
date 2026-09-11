@@ -4,6 +4,7 @@ import { CodexAdapter } from "@ai-usage-widget/adapter-codex";
 import { CursorAdapter } from "@ai-usage-widget/adapter-cursor";
 import { AnthropicAccount } from "./providers/anthropic-account.js";
 import { CursorAccount } from "./providers/cursor-account.js";
+import { CodexAccount } from "./providers/codex-account.js";
 import type { AccountLink } from "./providers/account-link.js";
 import type { AccountStatus, QuotaWindow } from "@ai-usage-widget/core";
 
@@ -27,11 +28,8 @@ export class Collector {
 
   constructor(opts: { config?: Config; storePath?: string; adapters?: Adapter[] } = {}) {
     this.config = opts.config ?? loadConfig();
-    this.accounts = [
-      new AnthropicAccount(this.config.providers.anthropicAccount),
-      new CursorAccount(this.config.providers.cursorAccount),
-    ];
     this.store = new EventStore(opts.storePath ?? dbPath(), new PricingTable(this.config.pricing));
+    const codex = new CodexAdapter(this.config.adapters["codex"] as any);
     this.adapters = opts.adapters ?? [
       new ClaudeCodeAdapter({
         ...(this.config.adapters["claude-code"] as any),
@@ -40,8 +38,17 @@ export class Collector {
           set: (k, v) => this.store.setState("claude-code", k, v),
         },
       }),
-      new CodexAdapter(this.config.adapters["codex"] as any),
+      codex,
       new CursorAdapter(this.config.adapters["cursor"] as any),
+    ];
+    // The Codex link reads the adapter's rate-limit snapshot; if a custom
+    // adapter list was passed it may not include Codex, in which case the
+    // link simply reports "no session".
+    const codexInList = this.adapters.find((a): a is CodexAdapter => a instanceof CodexAdapter) ?? null;
+    this.accounts = [
+      new AnthropicAccount(this.config.providers.anthropicAccount),
+      new CodexAccount({ ...this.config.providers.codexAccount, source: () => codexInList?.rateLimits() ?? null }),
+      new CursorAccount(this.config.providers.cursorAccount),
     ];
   }
 

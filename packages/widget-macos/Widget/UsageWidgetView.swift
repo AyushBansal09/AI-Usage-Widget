@@ -103,7 +103,9 @@ private struct WindowColumn: View {
     private func shortLabel(_ label: String) -> String {
         label
             .replacingOccurrences(of: "-hour window", with: "h")
+            .replacingOccurrences(of: "-day window", with: "d")
             .replacingOccurrences(of: " weekly cap", with: " 7d")
+            .replacingOccurrences(of: "ChatGPT Codex", with: "Codex")
     }
 }
 

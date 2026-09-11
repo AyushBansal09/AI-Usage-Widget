@@ -12,6 +12,8 @@ import type { AccountLink } from "./providers/account-link.js";
 
 /** `connect <name>` / `disconnect <name>`: how each link is built and where its login lives. */
 const LINKS: Record<string, { key: "anthropicAccount" | "cursorAccount"; label: string; make: (o: { enabled: boolean; pollSeconds: number }) => AccountLink; where: () => string; signIn: string }> = {
+  // No `codex` entry: the ChatGPT/Codex link needs no login step of ours —
+  // `codex login` + one session is enough, and it is on by default.
   claude: {
     key: "anthropicAccount", label: "Claude account",
     make: (o) => new AnthropicAccount(o),
@@ -61,13 +63,17 @@ async function main() {
         const d = await a.detect();
         console.log(`${d.available ? "✔" : "✘"} ${a.name}  ${d.location ?? ""} ${d.reason ?? ""}`);
       }
-      for (const [name, link] of Object.entries(LINKS)) {
-        const acct = collector.account(link.make({ enabled: false, pollSeconds: 60 }).provider);
-        if (acct?.status.enabled) {
+      // Account links: those with a `connect` command say how to turn them on;
+      // the Codex one is automatic (it only reads local logs).
+      const connectName: Record<string, string> = { anthropic: "claude", cursor: "cursor" };
+      for (const acct of collector.accounts) {
+        const name = connectName[acct.provider] ?? acct.provider;
+        if (acct.status.enabled) {
           const s = await acct.refresh();
           console.log(`${s.token === "ok" && !s.lastError ? "✔" : "✘"} ${name} account  ${describeAccount(s)}`);
         } else {
-          console.log(`· ${name} account  off (run \`ai-usage-widget connect ${name}\` to show real quota)`);
+          const hint = connectName[acct.provider] ? `run \`ai-usage-widget connect ${name}\` to show real quota` : "disabled in config";
+          console.log(`· ${name} account  off (${hint})`);
         }
       }
       collector.stop();

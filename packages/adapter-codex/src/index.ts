@@ -4,28 +4,60 @@ import { join, basename } from "node:path";
 import type { Adapter, AdapterDetection, EmitFn, UsageEventInput } from "@ai-usage-widget/core";
 
 /**
- * STATUS: skeleton, written from the documented rollout format, not yet
- * validated against a real ~/.codex install. First thing to do on a machine
- * with Codex: copy one rollout file into src/fixtures/ (scrubbed) and make
- * the test below pass against it.
+ * Reads OpenAI Codex CLI rollouts: $CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl
+ * (plus archived_sessions/). Validated against Codex CLI 0.154 (fixture in
+ * src/__fixtures__, scrubbed from a real session).
  *
- * Rollout format notes (Codex CLI 0.4x+):
- *  - Files: $CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl, plus
- *    archived_sessions/. Active copies win over archived ones.
- *  - First line: {"type":"session_meta","payload":{"id","cwd","model",...}}
- *  - Turn context: {"type":"turn_context","payload":{"model": "..."}}
- *  - Usage: {"type":"event_msg","payload":{"type":"token_count","info":{
- *      "total_token_usage":{input_tokens,cached_input_tokens,output_tokens,reasoning_output_tokens,total_tokens},
- *      "last_token_usage":{...same...}}}}
- *    `total_token_usage` is cumulative for the thread; `last_token_usage` is
- *    the delta for the most recent request. We emit one event per
- *    token_count line using the delta, and fall back to diffing cumulative
- *    totals when the delta is missing.
- *  - Tool calls: {"type":"response_item","payload":{"type":"function_call","name":"shell",...}}
+ * Each line is {timestamp, ordinal?, type, payload}. What matters:
+ *  - session_meta: {id, cwd, model_provider, cli_version, source}. `model` is
+ *    null here in 0.154; the model comes from turn_context.
+ *  - turn_context: {model, cwd, turn_id?}. One per turn.
+ *  - token_usage_record (0.15x+): one per API response, with `response_id`
+ *    and `usage` {input_tokens, cached_input_tokens, cache_write_input_tokens,
+ *    output_tokens, reasoning_output_tokens, total_tokens}. This is the event
+ *    source of choice: the id is OpenAI's own, so re-reading is idempotent.
+ *  - event_msg/token_count: {info.{total,last}_token_usage, rate_limits}.
+ *    Older Codex has only this; we then emit one event per line from the
+ *    `last_token_usage` delta. Always the source of `rate_limits`: the
+ *    account's own plan windows ({primary,secondary}.{used_percent,
+ *    window_minutes, resets_at}, plan_type, credits), which is how ChatGPT
+ *    quota reaches the widget without any network call of ours.
+ *  - response_item: function_call / custom_tool_call / local_shell_call for
+ *    tool use; message role=user for the prompt (skip the "<...>" preambles
+ *    Codex injects). event_msg/item_completed with item.type UserMessage is
+ *    the cleaner prompt source when present.
+ *
+ * Note `input_tokens` includes the cached part; we split it so "all tokens"
+ * never double counts: inputTokens = input - cached, cacheReadTokens = cached.
+ * Codex's own "tokens used" line equals input - cached + output.
  */
+
+export interface CodexRateLimitWindow {
+  id: "primary" | "secondary";
+  /** 0..100 as Codex reports it. */
+  usedPercent: number;
+  windowMinutes: number | null;
+  resetsAt: string | null;
+}
+
+export interface CodexRateLimits {
+  /** Timestamp of the rollout line this came from. */
+  at: string;
+  planType: string | null;
+  limitId: string | null;
+  windows: CodexRateLimitWindow[];
+  credits: { hasCredits: boolean; unlimited: boolean; balance: number | null } | null;
+}
+
+export interface RolloutParse {
+  events: UsageEventInput[];
+  rateLimits: CodexRateLimits | null;
+}
+
 export class CodexAdapter implements Adapter {
   readonly name = "codex";
   private dir: string;
+  private latest: CodexRateLimits | null = null;
 
   constructor(opts: { codexHome?: string } = {}) {
     this.dir = opts.codexHome ?? process.env.CODEX_HOME ?? join(homedir(), ".codex");
@@ -33,30 +65,41 @@ export class CodexAdapter implements Adapter {
 
   async detect(): Promise<AdapterDetection> {
     const sessions = join(this.dir, "sessions");
-    if (!existsSync(sessions)) return { available: false, location: sessions, reason: "No Codex sessions directory" };
+    if (!existsSync(sessions)) return { available: false, location: sessions, reason: "No Codex sessions directory (run `codex` once after `codex login`)" };
     return { available: true, location: sessions };
   }
 
   async backfill(emit: EmitFn): Promise<void> {
-    for (const file of this.listRollouts()) {
-      for (const ev of parseRollout(readFileSync(file, "utf8"), basename(file))) emit(ev);
-    }
+    for (const file of this.listRollouts()) this.ingest(file, emit);
   }
 
   async watch(emit: EmitFn): Promise<() => void> {
-    // TODO: offset-based tailing like the Claude Code adapter. For now a
-    // cheap full rescan every 10s (idempotent ids make this safe).
+    // Cheap full rescan of changed files every 10s; idempotent ids make this safe.
     const seen = new Map<string, number>();
     const tick = () => {
       for (const file of this.listRollouts()) {
-        const size = statSync(file).size;
+        let size: number;
+        try { size = statSync(file).size; } catch { continue; }
         if (seen.get(file) === size) continue;
         seen.set(file, size);
-        for (const ev of parseRollout(readFileSync(file, "utf8"), basename(file))) emit(ev);
+        this.ingest(file, emit);
       }
     };
     const t = setInterval(tick, 10_000);
     return () => clearInterval(t);
+  }
+
+  /** The newest rate-limit snapshot seen in any rollout. */
+  rateLimits(): CodexRateLimits | null {
+    return this.latest;
+  }
+
+  private ingest(file: string, emit: EmitFn): void {
+    let text: string;
+    try { text = readFileSync(file, "utf8"); } catch { return; }
+    const { events, rateLimits } = parseRolloutFull(text, basename(file));
+    for (const ev of events) emit(ev);
+    if (rateLimits && (!this.latest || rateLimits.at > this.latest.at)) this.latest = rateLimits;
   }
 
   listRollouts(): string[] {
@@ -70,66 +113,169 @@ export class CodexAdapter implements Adapter {
       }
     };
     walk(join(this.dir, "sessions"), 0);
+    walk(join(this.dir, "archived_sessions"), 0);
     return out.sort();
   }
 }
 
+/** Events only; see parseRolloutFull for the rate limits as well. */
 export function parseRollout(text: string, fileId: string): UsageEventInput[] {
+  return parseRolloutFull(text, fileId).events;
+}
+
+export function parseRolloutFull(text: string, fileId: string): RolloutParse {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const parsed: Array<{ d: any; i: number }> = [];
+  for (let i = 0; i < lines.length; i++) {
+    try { parsed.push({ d: JSON.parse(lines[i]!), i }); } catch { /* partial line while tailing */ }
+  }
+  // 0.15x writes token_usage_record; if a file has any, token_count is only
+  // used for rate limits, never for events (it would double count).
+  const hasRecords = parsed.some(({ d }) => d.type === "token_usage_record");
+
   const events: UsageEventInput[] = [];
-  let sessionId = fileId;
+  let rateLimits: CodexRateLimits | null = null;
+  let sessionId = fileId.replace(/^rollout-.*?-([0-9a-f-]{36})\.jsonl$/, "$1");
   let cwd: string | undefined;
   let model = "unknown";
-  let lastTools: string[] = [];
+  let turnId: string | undefined;
+  let pendingTools: string[] = [];
+  let lastToolActivity: string | undefined;
   let lastPrompt: string | undefined;
   let prevTotal: Record<string, number> | null = null;
 
-  const lines = text.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!.trim();
-    if (!line) continue;
-    let d: any;
-    try { d = JSON.parse(line); } catch { continue; }
-    const p = d.payload ?? {};
+  const emitUsage = (id: string, usage: any, timestamp: string, extra: Record<string, unknown>) => {
+    const cached = num(usage.cached_input_tokens);
+    events.push({
+      id,
+      source: "codex",
+      provider: "openai",
+      model,
+      timestamp,
+      sessionId,
+      agentId: "main",
+      project: cwd,
+      inputTokens: Math.max(num(usage.input_tokens) - cached, 0),
+      cacheReadTokens: cached,
+      cacheWriteTokens: num(usage.cache_write_input_tokens),
+      outputTokens: num(usage.output_tokens),
+      reasoningTokens: num(usage.reasoning_output_tokens),
+      costUsd: null,
+      toolCalls: pendingTools,
+      activity: lastToolActivity ?? lastPrompt,
+      meta: { prompt: lastPrompt, turnId, ...extra },
+    });
+    pendingTools = [];
+    lastToolActivity = undefined;
+  };
 
-    if (d.type === "session_meta") {
-      sessionId = p.id ?? sessionId;
-      cwd = p.cwd ?? cwd;
-      model = p.model ?? model;
-    } else if (d.type === "turn_context") {
-      model = p.model ?? model;
-    } else if (d.type === "response_item" && p.type === "function_call") {
-      lastTools.push(p.name ?? "tool");
-    } else if (d.type === "event_msg" && p.type === "user_message") {
-      lastPrompt = typeof p.message === "string" ? p.message.slice(0, 200) : lastPrompt;
-    } else if (d.type === "event_msg" && p.type === "token_count" && p.info) {
-      const total = p.info.total_token_usage ?? {};
-      let delta = p.info.last_token_usage;
-      if (!delta && prevTotal) {
-        delta = Object.fromEntries(Object.keys(total).map((k) => [k, (total[k] ?? 0) - (prevTotal![k] ?? 0)]));
+  for (const { d, i } of parsed) {
+    const p = d.payload ?? {};
+    const ts: string = typeof d.timestamp === "string" ? d.timestamp : new Date().toISOString();
+
+    switch (d.type) {
+      case "session_meta":
+        sessionId = p.id ?? sessionId;
+        cwd = p.cwd ?? cwd;
+        if (typeof p.model === "string") model = p.model;
+        break;
+      case "turn_context":
+        if (typeof p.model === "string") model = p.model;
+        cwd = p.cwd ?? cwd;
+        turnId = p.turn_id ?? p.root_turn_id ?? turnId;
+        break;
+      case "response_item":
+        if (p.type === "function_call" || p.type === "custom_tool_call" || p.type === "local_shell_call") {
+          const name = String(p.name ?? (p.type === "local_shell_call" ? "shell" : "tool"));
+          pendingTools.push(name);
+          lastToolActivity = describeCodexTool(name, p.arguments ?? p.input ?? p.action);
+        } else if (p.type === "message" && p.role === "user") {
+          const t = messageText(p.content);
+          if (t && !t.startsWith("<")) lastPrompt = excerpt(t);
+        }
+        break;
+      case "event_msg":
+        if (p.type === "user_message" && typeof p.message === "string") {
+          lastPrompt = excerpt(p.message);
+        } else if (p.type === "item_completed" && p.item?.type === "UserMessage") {
+          const t = messageText(p.item.content);
+          if (t) lastPrompt = excerpt(t);
+        } else if (p.type === "token_count") {
+          if (p.rate_limits) rateLimits = parseRateLimits(p.rate_limits, ts);
+          if (!hasRecords && p.info) {
+            const total = p.info.total_token_usage ?? {};
+            let delta = p.info.last_token_usage;
+            if (!delta && prevTotal) delta = Object.fromEntries(Object.keys(total).map((k) => [k, (total[k] ?? 0) - (prevTotal![k] ?? 0)]));
+            prevTotal = total;
+            if (delta) emitUsage(`codex:${sessionId}:${d.ordinal ?? i}`, delta, ts, { format: "token_count" });
+          }
+        }
+        break;
+      case "token_usage_record": {
+        const usage = p.usage ?? p.turn_token_usage;
+        if (!usage) break;
+        const rid = typeof p.response_id === "string" && p.response_id ? p.response_id : `${sessionId}:${d.ordinal ?? i}`;
+        if (typeof p.turn_id === "string") turnId = p.turn_id;
+        emitUsage(`codex:${rid}`, usage, ts, { format: "token_usage_record", responseId: p.response_id });
+        break;
       }
-      prevTotal = total;
-      if (!delta) continue;
-      const cached = delta.cached_input_tokens ?? 0;
-      events.push({
-        id: `codex:${sessionId}:${i}`,
-        source: "codex",
-        provider: "openai",
-        model,
-        timestamp: d.timestamp ?? new Date().toISOString(),
-        sessionId,
-        agentId: "main",
-        project: cwd,
-        inputTokens: Math.max((delta.input_tokens ?? 0) - cached, 0),
-        cacheReadTokens: cached,
-        outputTokens: delta.output_tokens ?? 0,
-        reasoningTokens: delta.reasoning_output_tokens ?? 0,
-        costUsd: null,
-        toolCalls: lastTools,
-        activity: lastTools.length ? `${lastTools[lastTools.length - 1]}` : lastPrompt,
-        meta: { prompt: lastPrompt },
-      });
-      lastTools = [];
     }
   }
-  return events;
+  return { events, rateLimits };
+}
+
+export function parseRateLimits(rl: any, at: string): CodexRateLimits | null {
+  if (!rl || typeof rl !== "object") return null;
+  const windows: CodexRateLimitWindow[] = [];
+  for (const id of ["primary", "secondary"] as const) {
+    const w = rl[id];
+    if (!w || typeof w !== "object" || typeof w.used_percent !== "number") continue;
+    windows.push({
+      id,
+      usedPercent: Math.max(0, Math.min(100, w.used_percent)),
+      windowMinutes: typeof w.window_minutes === "number" ? w.window_minutes : null,
+      resetsAt: epochToIso(w.resets_at),
+    });
+  }
+  const c = rl.credits;
+  return {
+    at,
+    planType: typeof rl.plan_type === "string" ? rl.plan_type : null,
+    limitId: typeof rl.limit_id === "string" ? rl.limit_id : null,
+    windows,
+    credits: c && typeof c === "object" ? { hasCredits: !!c.has_credits, unlimited: !!c.unlimited, balance: typeof c.balance === "number" ? c.balance : null } : null,
+  };
+}
+
+/** "shell: git status", "apply_patch" */
+export function describeCodexTool(name: string, args: unknown): string {
+  let a: any = args;
+  if (typeof a === "string") { try { a = JSON.parse(a); } catch { a = { command: a }; } }
+  let detail: string | undefined;
+  const cmd = a?.command ?? a?.cmd;
+  if (Array.isArray(cmd)) detail = cmd.join(" ");
+  else if (typeof cmd === "string") detail = cmd;
+  else if (typeof a?.path === "string") detail = a.path;
+  return detail ? `${name}: ${excerpt(detail, 70)}` : name;
+}
+
+function messageText(content: unknown): string | undefined {
+  if (!Array.isArray(content)) return undefined;
+  const parts = content.map((c: any) => (typeof c?.text === "string" ? c.text : "")).filter(Boolean);
+  return parts.length ? parts.join(" ") : undefined;
+}
+
+function excerpt(s: string, n = 120): string {
+  const one = s.replace(/[*_`#>]+/g, "").replace(/\s+/g, " ").trim();
+  return one.length <= n ? one : one.slice(0, n - 1) + "…";
+}
+
+function epochToIso(v: unknown): string | null {
+  if (typeof v === "number" && Number.isFinite(v)) return new Date(v < 1e12 ? v * 1000 : v).toISOString();
+  if (typeof v === "string" && Number.isFinite(Date.parse(v))) return new Date(v).toISOString();
+  return null;
+}
+
+function num(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.round(v)) : 0;
 }

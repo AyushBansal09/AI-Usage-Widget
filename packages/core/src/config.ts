@@ -85,6 +85,17 @@ export const ConfigSchema = z.object({
           pollSeconds: z.number().int().min(60).default(600),
         })
         .default({}),
+      /**
+       * ChatGPT/Codex plan windows, read from Codex CLI's own rollout logs
+       * (they carry `rate_limits`). No network call, so on by default; the
+       * numbers are as fresh as the last Codex turn and labelled with it.
+       */
+      codexAccount: z
+        .object({
+          enabled: z.boolean().default(true),
+          pollSeconds: z.number().int().min(10).default(30),
+        })
+        .default({}),
     })
     .default({}),
 });
