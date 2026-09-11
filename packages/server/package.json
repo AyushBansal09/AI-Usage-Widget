@@ -22,7 +22,7 @@
     "@ai-usage-widget/adapter-cursor": "workspace:*",
     "@ai-usage-widget/core": "workspace:*",
     "@hono/node-server": "^1.13.0",
-    "better-sqlite3": "^11.7.0",
+    "better-sqlite3": "^13.0.0",
     "hono": "^4.6.0"
   },
   "devDependencies": {
