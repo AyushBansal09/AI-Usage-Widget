@@ -160,6 +160,89 @@ It is on by default (`providers.codexAccount`) because it only reads local
 files; the number is as fresh as your last Codex turn and is captioned with
 that time. Validated against Codex CLI 0.154 with a scrubbed real rollout.
 
+## Add any other AI tool
+
+Claude Code, Codex and Cursor are built in, but nothing about the design is
+specific to them: every source reduces to the same `UsageEvent`, so the
+dashboard, the windows and the widget work the same for a tool nobody has
+heard of. There are three ways in, cheapest first — pick by what your tool
+leaves behind.
+
+### 1. It writes JSON or JSONL logs → describe them in config, write no code
+
+Add a `customSources` entry to `~/.ai-usage-widget/config.json`. `map` says
+where each field lives (dotted paths, `[0]` for arrays); only `timestamp` is
+required.
+
+```jsonc
+"customSources": [{
+  "name": "mytool",                       // becomes the source name everywhere
+  "provider": "openai",                   // anthropic | openai | google | other
+  "files": "~/.mytool/logs/**/*.jsonl",   // ~ expanded, ** crosses directories
+  "format": "jsonl",                      // or "json" (+ "recordsAt": "data")
+  "where": { "kind": "completion" },      // skip other lines; `true` = "must be present"
+  "map": {
+    "id": "response.id",                  // omit and it falls back to file+line
+    "timestamp": "created",               // ISO, epoch seconds or epoch millis
+    "model": "response.model",
+    "sessionId": "thread",
+    "project": "meta.cwd",
+    "activity": "prompt",
+    "inputTokens": "response.usage.prompt_tokens",
+    "outputTokens": "response.usage.completion_tokens"
+  },
+  "defaults": { "model": "gpt-5" }        // used only where the log is silent
+}]
+```
+
+JSONL files are tailed by byte offset, so only new lines are read. Unmapped
+token fields stay 0 and cost stays null rather than being guessed — an unknown
+model shows as **unpriced**, never as $0.
+
+### 2. It has no logs → push events over HTTP
+
+Anything that can make a request can report usage. One event or an array:
+
+```bash
+curl -s localhost:4321/api/ingest -H 'content-type: application/json' -d '{
+  "id": "my-script:42", "source": "my-script", "provider": "anthropic",
+  "model": "claude-opus-4-5", "timestamp": "2026-09-11T18:30:00Z",
+  "sessionId": "cron", "agentId": "main",
+  "inputTokens": 2000, "outputTokens": 300, "activity": "nightly summary job"
+}'
+# {"ingested":1,"duplicates":0,"rejected":0,"errors":[]}
+```
+
+Ids are yours, so retries are safe — the same id upserts instead of double
+counting. The endpoint is bound to `127.0.0.1` only. Good for shell hooks,
+CI jobs, agent frameworks, and languages other than JavaScript.
+
+### 3. It needs real logic → drop in a plugin file
+
+One file, no build step, no package to publish:
+
+```js
+// ~/.ai-usage-widget/plugins/my-tool.mjs
+export default {
+  name: "my-tool",
+  async detect() { return { available: true, location: "~/.mytool" }; },
+  async backfill(emit) { emit({ /* a UsageEvent */ }); },
+  async watch(emit) { const t = setInterval(() => {}, 5000); return () => clearInterval(t); },
+};
+```
+
+```jsonc
+"plugins": ["~/.ai-usage-widget/plugins/my-tool.mjs"]   // or an npm package name
+```
+
+A default export may be the object, a factory returning one, or a class. Give
+events ids derived from your source's own ids so re-reading is idempotent. A
+plugin that fails to load is reported and skipped — it can't take the
+collector down with it.
+
+All three show up in `ai-usage-widget doctor`, in the Sources panel, in the
+agents table and in the widget, exactly like a built-in adapter.
+
 ## Configuration
 
 First run writes `~/.ai-usage-widget/config.json` (override the directory with
@@ -183,7 +266,9 @@ percentage — providers do not expose exact quotas, so this is your own estimat
     "anthropicAccount": { "enabled": false, "pollSeconds": 120 },
     "cursorAccount": { "enabled": false, "pollSeconds": 600 },
     "codexAccount": { "enabled": true, "pollSeconds": 30 }
-  }
+  },
+  "customSources": [],
+  "plugins": []
 }
 ```
 
@@ -198,6 +283,7 @@ packages/
   adapter-claude-code/  Transcript parser + offset-based tailer
   adapter-codex/        Codex CLI rollout parser (token_usage_record + rate_limits), validated on 0.154
   adapter-cursor/       Cursor state.vscdb reader: agent steps, tool calls, token counts where recorded
+  adapter-custom/       Config-driven reader for any JSON/JSONL log ("customSources"), no code required
   server/               Collector (adapters -> store), Hono API + SSE, CLI, serves the built dashboard
   web/                  React dashboard + compact /widget view, builds into server/public
   menubar/              Tauri menu bar app: tray title from /api/tray, popover loads /widget

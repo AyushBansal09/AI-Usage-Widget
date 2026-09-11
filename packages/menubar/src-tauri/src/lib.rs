@@ -33,6 +33,10 @@ struct TrayInfo {
     title: String,
     #[serde(default)]
     severity: String,
+    /// Which window the number is about. With several providers connected the
+    /// tray shows whichever is fullest, so the tooltip must name it.
+    #[serde(default)]
+    label: Option<String>,
 }
 
 fn port() -> String {
@@ -110,7 +114,11 @@ fn update_tray(app: &AppHandle) {
                 _ => "",
             };
             let _ = tray.set_title(Some(format!("{prefix}{}", info.title)));
-            let _ = tray.set_tooltip(Some("AI Usage Widget — click for details"));
+            let tip = match &info.label {
+                Some(l) => format!("{l} — click for details"),
+                None => "AI Usage Widget — click for details".to_string(),
+            };
+            let _ = tray.set_tooltip(Some(tip));
         }
         None => {
             let _ = tray.set_title(Some("--"));

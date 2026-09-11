@@ -42,7 +42,9 @@ async function main() {
       const port = portFlag ? Number(portFlag.split("=")[1]) : collector.config.port;
       await collector.start({ watch: true });
       const app = createApp(collector, WEB_DIR);
-      serve({ fetch: app.fetch, port }, () => {
+      // Loopback only: this is a local-first tool, and /api/ingest accepts
+      // writes. Nothing should be reachable from the rest of the network.
+      serve({ fetch: app.fetch, port, hostname: "127.0.0.1" }, () => {
         const url = `http://localhost:${port}`;
         console.error(`ai-usage-widget dashboard: ${url}`);
         if (!flags.has("--no-open")) openBrowser(url);
@@ -59,6 +61,7 @@ async function main() {
     }
     case "doctor": {
       const collector = new Collector();
+      await collector.ensurePlugins();
       for (const a of collector.adapters) {
         const d = await a.detect();
         console.log(`${d.available ? "✔" : "✘"} ${a.name}  ${d.location ?? ""} ${d.reason ?? ""}`);

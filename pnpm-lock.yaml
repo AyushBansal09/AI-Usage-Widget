@@ -69,6 +69,22 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@22.20.2)(tsx@4.23.13)
 
+  packages/adapter-custom:
+    dependencies:
+      '@ai-usage-widget/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.2
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@22.20.2)(tsx@4.23.13)
+
   packages/core:
     dependencies:
       better-sqlite3:
@@ -108,6 +124,9 @@ importers:
       '@ai-usage-widget/adapter-cursor':
         specifier: workspace:*
         version: link:../adapter-cursor
+      '@ai-usage-widget/adapter-custom':
+        specifier: workspace:*
+        version: link:../adapter-custom
       '@ai-usage-widget/core':
         specifier: workspace:*
         version: link:../core

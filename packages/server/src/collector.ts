@@ -2,6 +2,8 @@ import { EventStore, PricingTable, dbPath, loadConfig, type Adapter, type Config
 import { ClaudeCodeAdapter } from "@ai-usage-widget/adapter-claude-code";
 import { CodexAdapter } from "@ai-usage-widget/adapter-codex";
 import { CursorAdapter } from "@ai-usage-widget/adapter-cursor";
+import { CustomAdapter, type CustomSource } from "@ai-usage-widget/adapter-custom";
+import { loadPlugins } from "./plugins.js";
 import { AnthropicAccount } from "./providers/anthropic-account.js";
 import { CursorAccount } from "./providers/cursor-account.js";
 import { CodexAccount } from "./providers/codex-account.js";
@@ -25,6 +27,7 @@ export class Collector {
   readonly accounts: AccountLink[];
   private stops: Array<() => void> = [];
   private detections = new Map<string, AdapterDetection>();
+  private pluginsLoaded = false;
 
   constructor(opts: { config?: Config; storePath?: string; adapters?: Adapter[] } = {}) {
     this.config = opts.config ?? loadConfig();
@@ -40,6 +43,8 @@ export class Collector {
       }),
       codex,
       new CursorAdapter(this.config.adapters["cursor"] as any),
+      // User-declared tools: no code, just a field map in config.json.
+      ...this.config.customSources.map((s) => new CustomAdapter(s as CustomSource, s.pollMs)),
     ];
     // The Codex link reads the adapter's rate-limit snapshot; if a custom
     // adapter list was passed it may not include Codex, in which case the
@@ -52,7 +57,21 @@ export class Collector {
     ];
   }
 
+  /**
+   * Load `config.plugins` into the adapter list. Idempotent, and separate
+   * from start() so read-only commands like `doctor` list plugin adapters
+   * too — a plugin the user installed should be as visible as a built-in.
+   */
+  async ensurePlugins(): Promise<void> {
+    if (this.pluginsLoaded || this.config.plugins.length === 0) return;
+    this.pluginsLoaded = true;
+    const { adapters, errors } = await loadPlugins(this.config.plugins);
+    for (const e of errors) console.error(`[plugin] ${e}`);
+    this.adapters.push(...adapters);
+  }
+
   async start(opts: { watch?: boolean } = { watch: true }) {
+    await this.ensurePlugins();
     for (const a of this.adapters) {
       const det = await a.detect();
       this.detections.set(a.name, det);
@@ -92,9 +111,20 @@ export class Collector {
     return all.sort((a, b) => rank(a) - rank(b));
   }
 
-  /** The window the tray title is built from, when any link is on. */
+  /**
+   * The window the tray title is built from.
+   *
+   * Not "the first provider": with several providers connected the number
+   * that matters is the one that will stop work first, so the fullest window
+   * wins. Picking by provider order once put Codex's untouched 30-day window
+   * ("100% left") in the tray while Claude's 5-hour window was the real
+   * constraint. Ties break toward Anthropic's 5-hour window. Callers must
+   * show the window's label, since which provider wins can change.
+   */
   primaryQuota(): QuotaWindow | null {
-    return this.quota()[0] ?? null;
+    const all = this.quota();
+    if (all.length === 0) return null;
+    return all.reduce((best, q) => (q.fraction > best.fraction ? q : best), all[0]!);
   }
 
   sources(): SourceStatus[] {

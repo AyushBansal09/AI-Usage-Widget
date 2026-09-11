@@ -142,6 +142,8 @@ export class AnthropicAccount implements AccountLink {
   status: AccountStatus;
   /** Last response body, in memory only, for `connect claude --raw` (fixture capture). Token-free by nature. */
   lastRaw: unknown = null;
+  /** Epoch ms before which we must not call the endpoint again (HTTP 429). */
+  private retryAfter = 0;
   private listeners = new Set<(s: AccountStatus) => void>();
 
   constructor(opts: AnthropicAccountOptions) {
@@ -183,6 +185,7 @@ export class AnthropicAccount implements AccountLink {
   /** One fetch. Never throws; the outcome lands in `status`. */
   async refresh(): Promise<AccountStatus> {
     const now = this.opts.now();
+    if (this.retryAfter && now.getTime() < this.retryAfter) return this.status;
     const cred = await this.opts.readCredential();
     if (!cred) {
       this.set({ credential: "none", token: "missing", subscription: null, lastError: "No Claude Code login found. Run `claude` and sign in." });
@@ -206,6 +209,14 @@ export class AnthropicAccount implements AccountLink {
         signal: ctrl.signal,
       });
       clearTimeout(t);
+      if (res.status === 429) {
+        // Back off rather than hammering: honour Retry-After when given,
+        // otherwise wait a few polls. The last good quota stays on screen.
+        const after = Number(res.headers.get("retry-after"));
+        this.retryAfter = now.getTime() + (Number.isFinite(after) && after > 0 ? after * 1000 : 10 * 60_000);
+        this.set({ credential: cred.from, token: "ok", subscription: cred.subscription, lastError: `Anthropic rate-limited the usage endpoint; retrying after ${new Date(this.retryAfter).toISOString()}.` });
+        return this.status;
+      }
       if (res.status === 401 || res.status === 403) {
         this.set({ credential: cred.from, token: "expired", subscription: cred.subscription, lastError: `Anthropic rejected the token (HTTP ${res.status}). Open \`claude\` once to refresh it.` });
         return this.status;
@@ -217,6 +228,7 @@ export class AnthropicAccount implements AccountLink {
       const body = await res.json();
       this.lastRaw = body;
       const quota = parseUsageResponse(body, now);
+      this.retryAfter = 0;
       this.set({
         credential: cred.from, token: "ok", subscription: cred.subscription,
         lastFetch: now.toISOString(), lastError: quota.length ? null : "Usage endpoint answered, but with no windows we recognise.",
