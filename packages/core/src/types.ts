@@ -161,7 +161,8 @@ export interface QuotaWindow {
   /** Provider's key for the window, e.g. "five_hour", "seven_day". */
   id: string;
   label: string;
-  provider: "anthropic";
+  /** "anthropic" | "cursor" | "openai" … — whoever measured it. */
+  provider: string;
   /** 0..1 used, as the provider reports it. */
   fraction: number;
   resetsAt: string | null;
@@ -171,10 +172,10 @@ export interface QuotaWindow {
 
 /** Health of an optional provider-account connection. Never carries a token. */
 export interface AccountStatus {
-  provider: "anthropic";
+  provider: string;
   enabled: boolean;
   /** Where a credential was found. */
-  credential: "keychain" | "file" | "none";
+  credential: "keychain" | "file" | "database" | "none";
   token: "ok" | "expired" | "missing";
   subscription: string | null;
   lastFetch: string | null;

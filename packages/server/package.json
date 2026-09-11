@@ -19,11 +19,14 @@
   "dependencies": {
     "@ai-usage-widget/adapter-claude-code": "workspace:*",
     "@ai-usage-widget/adapter-codex": "workspace:*",
+    "@ai-usage-widget/adapter-cursor": "workspace:*",
     "@ai-usage-widget/core": "workspace:*",
     "@hono/node-server": "^1.13.0",
+    "better-sqlite3": "^11.7.0",
     "hono": "^4.6.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",

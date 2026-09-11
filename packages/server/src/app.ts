@@ -34,8 +34,8 @@ export function createApp(collector: Collector, webDir: string) {
       allTime: store.totals(),
       efficiency: efficiency(inRange),
       windows: config.windows.map((w) => rollingWindow(windowEvents, w)),
-      quota: collector.account.status.quota,
-      account: collector.account.status,
+      quota: collector.quota(),
+      accounts: collector.accountStatuses(),
       budgets: config.budgets.map((b) => budgetWindow(monthEvents, b)),
       sources: collector.sources(),
       byModel: byKey(inRange, (e) => e.model),
@@ -73,7 +73,7 @@ export function createApp(collector: Collector, webDir: string) {
     const active = agents.filter((a) => a.status === "active").length;
     // A measured window from the account beats the local estimate whenever
     // we have one; the payload says which it was.
-    const measured = primaryQuota();
+    const measured = collector.primaryQuota();
     const fraction = measured ? measured.fraction : primary?.fraction ?? null;
     let title: string;
     if (fraction !== null) title = `${Math.round((1 - fraction) * 100)}%`;
@@ -94,13 +94,14 @@ export function createApp(collector: Collector, webDir: string) {
     });
   });
 
-  /** Connection health for the optional Anthropic account link. Never includes a token. */
-  app.get("/api/account", (c) => c.json(collector.account.status));
+  /** Health of every optional account link. Never includes a token. */
+  app.get("/api/account", (c) => c.json(collector.accountStatuses()));
 
-  /** The account-reported 5h window, if the account link is on and healthy. */
-  function primaryQuota() {
-    const q = collector.account.status.quota;
-    return q.find((w) => w.id === "five_hour") ?? q[0] ?? null;
+  /** The link behind the measured headline, for the widget's small status line. */
+  function primaryAccount() {
+    const q = collector.primaryQuota();
+    const s = (q && collector.account(q.provider)?.status) ?? collector.accountStatuses().find((a) => a.enabled) ?? collector.accountStatuses()[0]!;
+    return { provider: s.provider, enabled: s.enabled, token: s.token, lastFetch: s.lastFetch };
   }
 
   /**
@@ -157,8 +158,8 @@ export function createApp(collector: Collector, webDir: string) {
         estimate: true,
       })),
       /** Measured by the provider (all devices). Empty unless `connect claude` was run. */
-      quota: collector.account.status.quota,
-      account: { enabled: collector.account.status.enabled, token: collector.account.status.token, lastFetch: collector.account.status.lastFetch },
+      quota: collector.quota(),
+      account: primaryAccount(),
       activeAgents: snapshots.filter((a) => a.status === "active").length,
       agents,
       day: {

@@ -74,6 +74,28 @@ export const ConfigSchema = z.object({
           pollSeconds: z.number().int().min(30).default(120),
         })
         .default({}),
+      /**
+       * Reuse Cursor's own login (the access token in its state.vscdb) to read
+       * the plan's request quota from cursor.com. Same rules: read-only,
+       * never refreshed, off until `connect cursor`.
+       */
+      cursorAccount: z
+        .object({
+          enabled: z.boolean().default(false),
+          pollSeconds: z.number().int().min(60).default(600),
+        })
+        .default({}),
+      /**
+       * ChatGPT/Codex plan windows, read from Codex CLI's own rollout logs
+       * (they carry `rate_limits`). No network call, so on by default; the
+       * numbers are as fresh as the last Codex turn and labelled with it.
+       */
+      codexAccount: z
+        .object({
+          enabled: z.boolean().default(true),
+          pollSeconds: z.number().int().min(10).default(30),
+        })
+        .default({}),
     })
     .default({}),
 });

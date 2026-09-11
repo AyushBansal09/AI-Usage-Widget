@@ -89,11 +89,22 @@ tokens — across whichever AI tools you use day to day.
 7. `npm publish` as a single `ai-usage-widget` package; GitHub Actions for
    typecheck + tests on macOS/Linux/Windows.
 
-### Phase 2 — Codex CLI
-1. Validate the rollout parser against real logs; handle `archived_sessions`,
-   subagent replay baselines, compaction.
+### Phase 2 — Codex CLI (= the ChatGPT path)
+There is no ChatGPT desktop log; Codex CLI is how a ChatGPT account shows up.
+1. **Done (2026-09-11):** parser validated against a real Codex CLI 0.154
+   rollout (scrubbed fixture). 0.15x writes a `token_usage_record` per API
+   response with OpenAI's `response_id` — that is the event id now; the
+   `token_count` delta path is kept for older versions and never used when
+   records exist (no double counting). `model` comes from `turn_context`
+   (null in `session_meta`). `archived_sessions/` is scanned too. Still to
+   do: subagent replay baselines, compaction, a multi-turn fixture.
 2. Offset-based tailing (reuse the Claude Code tailer; extract to core).
-3. OpenAI plan windows (ChatGPT Plus/Pro Codex quotas) as configured windows.
+   Today: full rescan of changed files every 10s, safe because ids are stable.
+3. **Done:** ChatGPT quota from the logs, not the network. `rate_limits` on
+   `token_count` (plan_type, primary/secondary window_minutes, used_percent,
+   resets_at epoch) → `CodexAccount` (provider "openai"), on by default since
+   it is local-only; `measuredAt` is the rollout line's time so staleness is
+   visible. Free plan observed: one 30-day primary window, no secondary.
 
 ### Phase 3 — user-set budgets and API keys
 1. Budgets UI (create/edit in the dashboard, persisted to config).
@@ -113,12 +124,28 @@ tokens — across whichever AI tools you use day to day.
    usage from responses, so people's own scripts and agent frameworks show up
    by pointing `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` at it. Streaming-aware.
 
-### Phase 4 — IDE agents (Cursor, Windsurf, Copilot)
-These do not write usable local usage logs. Options, in order of preference:
+### Phase 4 — IDE agents (Cursor, Windsurf, Copilot, Antigravity)
+**Cursor: done as a local adapter (2026-09-11).** It turned out Cursor's
+`state.vscdb` is a usable log: every agent step is a row with a stable id,
+timestamp, tool name/args, mode, and — on some steps — `tokenCount`. See
+`packages/adapter-cursor`; fixture scrubbed from a real database. Rules
+that fell out of it: steps without a token count are emitted with zeros and
+`meta.tokensReported=false` (activity is still worth showing); the "default"
+auto-router model stays `cursor-auto`/unpriced.
+`connect cursor` reuses Cursor's own login for plan quota, but the legacy
+`/api/usage` endpoint now returns `maxRequestUsage: null` on current plans
+(Cursor moved to usage-based pricing), so it refuses to enable a window it
+cannot back. Next: find the dashboard endpoint Cursor's own settings page
+uses for the current cycle's spend, capture it with `--raw`, and map it to a
+`usd`-unit QuotaWindow.
+
+Others still have no local log. Options, in order of preference:
 1. Import from their usage/export pages (CSV/JSON upload in the dashboard).
 2. Browser-extension or bookmarklet that scrapes the usage page on demand.
 3. Session-count-only mode where we show activity but not tokens.
-Decide per tool once we have a contributor who uses it daily.
+Antigravity (Google) keeps conversations as protobuf under
+`~/.gemini/antigravity/{conversations,brain}`; a session-count adapter is
+plausible once the .pb schema is understood.
 
 ### Phase 5 — optional hosted/team layer
 A tiny sync agent that ships `UsageEvent`s to a self-hostable server with team
