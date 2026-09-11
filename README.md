@@ -125,6 +125,32 @@ dashboard all put the measured 5-hour number first, labelled
 two are never merged: one is a measurement of your whole account, the other an
 inference from one device's logs.
 
+## Cursor
+
+Cursor is read from its own local database
+(`~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`,
+read-only): every agent/chat step becomes an event with the tool it ran and
+what it touched, so Cursor agents show up in the agents table and the widget.
+Two honest caveats, both visible in the UI:
+
+- Cursor only records token counts on some steps (about 1 in 25 on the
+  install this was built against). Steps without a count are kept for
+  activity and marked `tokensReported: false`; they are not guessed.
+- Cursor usually routes through its "default" auto model, so events are
+  `cursor-auto` and **unpriced** unless you picked a specific model.
+
+`ai-usage-widget connect cursor` reuses Cursor's own login (read-only) to
+read your plan's quota from cursor.com. It only switches on if Cursor
+reports a cap it can show; usage-based plans get "no cap" rather than a
+made-up percentage.
+
+## ChatGPT / Codex CLI
+
+There is no local log for ChatGPT itself. The way in is the Codex CLI
+(`npm i -g @openai/codex`, then `codex login` with your ChatGPT account): its
+session logs under `~/.codex/sessions` carry both token usage and your plan's
+rate-limit windows, so ChatGPT quota needs no extra network call.
+
 ## Configuration
 
 First run writes `~/.ai-usage-widget/config.json` (override the directory with
@@ -144,7 +170,10 @@ percentage — providers do not expose exact quotas, so this is your own estimat
   ],
   "pricing": { "claude-fable-5-1": { "input": 0, "output": 0 } },
   "adapters": {},
-  "providers": { "anthropicAccount": { "enabled": false, "pollSeconds": 120 } }
+  "providers": {
+    "anthropicAccount": { "enabled": false, "pollSeconds": 120 },
+    "cursorAccount": { "enabled": false, "pollSeconds": 600 }
+  }
 }
 ```
 
@@ -158,6 +187,7 @@ packages/
   core/                 UsageEvent schema, SQLite store, pricing, aggregation (windows, budgets, efficiency)
   adapter-claude-code/  Transcript parser + offset-based tailer
   adapter-codex/        Rollout parser (skeleton)
+  adapter-cursor/       Cursor state.vscdb reader: agent steps, tool calls, token counts where recorded
   server/               Collector (adapters -> store), Hono API + SSE, CLI, serves the built dashboard
   web/                  React dashboard + compact /widget view, builds into server/public
   menubar/              Tauri menu bar app: tray title from /api/tray, popover loads /widget
