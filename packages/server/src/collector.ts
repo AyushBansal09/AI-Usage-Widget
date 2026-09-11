@@ -1,6 +1,7 @@
 import { EventStore, PricingTable, dbPath, loadConfig, type Adapter, type Config, type AdapterDetection } from "@ai-usage-widget/core";
 import { ClaudeCodeAdapter } from "@ai-usage-widget/adapter-claude-code";
 import { CodexAdapter } from "@ai-usage-widget/adapter-codex";
+import { CursorAdapter } from "@ai-usage-widget/adapter-cursor";
 import { AnthropicAccount } from "./providers/anthropic-account.js";
 
 export interface SourceStatus extends AdapterDetection {
@@ -34,6 +35,7 @@ export class Collector {
         },
       }),
       new CodexAdapter(this.config.adapters["codex"] as any),
+      new CursorAdapter(this.config.adapters["cursor"] as any),
     ];
   }
 
