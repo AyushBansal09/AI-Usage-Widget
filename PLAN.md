@@ -19,6 +19,19 @@ tokens — across whichever AI tools you use day to day.
 - **Honest numbers.** Unknown models are "unpriced", never $0. Rolling windows
   are labelled as estimates: providers do not expose exact remaining quota, and
   activity on other devices is invisible to local logs.
+- **Three doors in, so "any tool" is true rather than aspirational.** A
+  built-in adapter is now the *last* resort, not the first: (1) a tool that
+  writes JSON/JSONL gets a `customSources` entry — a field map in config, no
+  code; (2) a tool with no logs at all pushes to `POST /api/ingest` from a
+  hook, a script or CI; (3) anything needing real logic is a one-file plugin
+  named in `config.plugins`, loaded at startup and skipped with a message if
+  it breaks. All three surface identically in `doctor`, Sources, the agents
+  table and the widget. The bundled adapters exist because those three tools
+  are common, not because the core knows anything about them.
+- **The tray shows the binding constraint.** With several providers connected,
+  `primaryQuota()` picks the *fullest* window rather than a favoured provider:
+  the number that matters is the one that stops work first. Callers must show
+  the window's label, because which provider wins can change.
 - **Measured beats estimated, and the two never merge.** Anthropic *does*
   expose per-window utilisation to a logged-in Claude Code (the `/usage`
   endpoint). `connect claude` reuses that login read-only and surfaces the
@@ -146,6 +159,22 @@ Others still have no local log. Options, in order of preference:
 Antigravity (Google) keeps conversations as protobuf under
 `~/.gemini/antigravity/{conversations,brain}`; a session-count adapter is
 plausible once the .pb schema is understood.
+
+### Phase 4b — universal extensibility (done 2026-09-11)
+`customSources` (config-only field mapping over JSON/JSONL), `POST /api/ingest`
+(push from anything), and `config.plugins` (one-file adapters). Verified
+together on one collector: five sources side by side — claude-code, codex,
+cursor, a config-only "mytool", a plugin, and a script that only POSTed.
+The server now binds `127.0.0.1` explicitly, since it accepts writes.
+Still open:
+1. `ai-usage-widget proxy` (was Phase 3.3) — the last gap: tools that neither
+   log nor can be modified. A local OpenAI/Anthropic-compatible endpoint that
+   forwards and records usage, streaming-aware. This is the only remaining
+   "any tool" case the three doors above do not cover.
+2. A `customSources` generator: `ai-usage-widget sniff <file>` proposes a
+   field map from a sample log, so users do not hand-write dotted paths.
+3. Publish the adapter contract as a tiny `@ai-usage-widget/adapter-kit` with
+   the types and a template repo.
 
 ### Phase 5 — optional hosted/team layer
 A tiny sync agent that ships `UsageEvent`s to a self-hostable server with team

@@ -6,6 +6,8 @@ import { buildAgentSnapshots, efficiency, rollingWindow, budgetWindow, timeline 
 import type { Collector } from "./collector.js";
 
 const RANGES: Record<string, number> = { "1h": 1, "5h": 5, "24h": 24, "7d": 24 * 7, "30d": 24 * 30 };
+/** Cap on one /api/ingest batch, so a runaway script cannot wedge the collector. */
+const MAX_INGEST = 1000;
 const MIME: Record<string, string> = {
   ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".json": "application/json",
 };
@@ -83,6 +85,9 @@ export function createApp(collector: Collector, webDir: string) {
     return c.json({
       title,
       measured: measured !== null,
+      /** Which window the title is about — it can change provider, so never show the number alone. */
+      label: measured?.label ?? primary?.label ?? null,
+      provider: measured?.provider ?? null,
       measuredAt: measured?.measuredAt ?? null,
       fractionUsed: fraction,
       used: primary?.used ?? 0,
@@ -92,6 +97,43 @@ export function createApp(collector: Collector, webDir: string) {
       activeAgents: active,
       severity: fraction === null ? "none" : fraction >= 0.9 ? "critical" : fraction >= 0.7 ? "warning" : "ok",
     });
+  });
+
+  /**
+   * Push usage from anything that can make an HTTP request — a shell hook, a
+   * Python script, an agent framework, CI — without writing an adapter.
+   * Body: one UsageEvent or an array of them. Ids are the caller's, so
+   * retrying the same POST is safe (the store upserts).
+   *
+   * Only bound to 127.0.0.1, so the trust boundary is "processes on this
+   * machine", the same as the SQLite file they could write directly.
+   */
+  app.post("/api/ingest", async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Body must be JSON: one UsageEvent or an array of them." }, 400);
+    }
+    const list = Array.isArray(body) ? body : [body];
+    if (list.length > MAX_INGEST) return c.json({ error: `At most ${MAX_INGEST} events per request.` }, 413);
+
+    let ingested = 0;
+    let duplicates = 0;
+    const errors: string[] = [];
+    for (const raw of list) {
+      try {
+        if (store.ingest(raw as never)) ingested++;
+        else duplicates++;
+      } catch (e) {
+        // Zod's message names the offending field, which is what a script author needs.
+        errors.push(((e as Error).message ?? String(e)).slice(0, 300));
+      }
+    }
+    return c.json(
+      { ingested, duplicates, rejected: errors.length, errors: errors.slice(0, 5) },
+      ingested === 0 && errors.length > 0 ? 400 : 200,
+    );
   });
 
   /** Health of every optional account link. Never includes a token. */

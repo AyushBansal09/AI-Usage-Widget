@@ -89,9 +89,36 @@ export class CodexAdapter implements Adapter {
     return () => clearInterval(t);
   }
 
-  /** The newest rate-limit snapshot seen in any rollout. */
+  /**
+   * The newest rate-limit snapshot seen in any rollout.
+   *
+   * Falls back to reading the most recent rollouts directly, so a caller that
+   * never ingested (`doctor`, or an account link polling before the first
+   * watch tick) still sees the plan's windows. Cheap: newest files first,
+   * stopping at the first one that carries `rate_limits`.
+   */
   rateLimits(): CodexRateLimits | null {
+    if (!this.latest) this.scanForRateLimits();
     return this.latest;
+  }
+
+  private scanForRateLimits(limit = 5): void {
+    const newest = this.listRollouts()
+      .map((f) => {
+        try { return { f, m: statSync(f).mtimeMs }; } catch { return null; }
+      })
+      .filter((x): x is { f: string; m: number } => x !== null)
+      .sort((a, b) => b.m - a.m)
+      .slice(0, limit);
+    for (const { f } of newest) {
+      let text: string;
+      try { text = readFileSync(f, "utf8"); } catch { continue; }
+      const { rateLimits } = parseRolloutFull(text, basename(f));
+      if (rateLimits) {
+        this.latest = rateLimits;
+        return;
+      }
+    }
   }
 
   private ingest(file: string, emit: EmitFn): void {

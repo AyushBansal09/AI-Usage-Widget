@@ -20,6 +20,7 @@
     "@ai-usage-widget/adapter-claude-code": "workspace:*",
     "@ai-usage-widget/adapter-codex": "workspace:*",
     "@ai-usage-widget/adapter-cursor": "workspace:*",
+    "@ai-usage-widget/adapter-custom": "workspace:*",
     "@ai-usage-widget/core": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "better-sqlite3": "^13.0.0",

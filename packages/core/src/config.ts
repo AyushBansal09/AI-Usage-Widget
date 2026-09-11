@@ -57,6 +57,39 @@ export const ConfigSchema = z.object({
   /** Per-adapter settings; adapters read their own key. */
   adapters: z.record(z.record(z.unknown())).default({}),
   /**
+   * Bring your own tool, with no code: point at its log files and say where
+   * the fields are. Each entry becomes its own source in the dashboard.
+   */
+  customSources: z
+    .array(
+      z.object({
+        /** Becomes UsageEvent.source. */
+        name: z.string().min(1),
+        provider: z.enum(["anthropic", "openai", "google", "other"]).default("other"),
+        /** Glob over the tool's logs; `~` is expanded, `**` crosses directories. */
+        files: z.string().min(1),
+        format: z.enum(["jsonl", "json"]).default("jsonl"),
+        /** For `json`: dotted path to the array of records inside the file. */
+        recordsAt: z.string().optional(),
+        /** Keep a record only if every path matches (`true` = just be present). */
+        where: z.record(z.unknown()).optional(),
+        /** Event field -> dotted path in the record. `timestamp` is required. */
+        map: z.record(z.string()).refine((m) => typeof m.timestamp === "string" && m.timestamp.length > 0, {
+          message: "customSources[].map.timestamp is required — without a time an event cannot be placed in any window",
+        }),
+        /** Static fallbacks used only where the log is silent, e.g. { model: "gpt-4o" }. */
+        defaults: z.record(z.union([z.string(), z.number()])).optional(),
+        pollMs: z.number().int().min(500).default(5000),
+      }),
+    )
+    .default([]),
+  /**
+   * Adapter plugins: npm package names or paths to a local .mjs/.js file.
+   * Each must export (default) an Adapter object, or a factory returning one.
+   * A plugin that fails to load is reported and skipped, never fatal.
+   */
+  plugins: z.array(z.string().min(1)).default([]),
+  /**
    * Optional provider-account connections. Off by default: the only network
    * call the collector makes is one the user switched on (`connect claude`).
    */
