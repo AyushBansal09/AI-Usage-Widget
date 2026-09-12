@@ -46,11 +46,34 @@ public enum Format {
     }
 
     /// The measured caveat is *when*, not *whether*: "Anthropic · 13:28".
+    /// When the provider reports real amounts, those replace the provider
+    /// name: "$70.74 of $100 · 13:28" says more in the same space.
     public static func caveat(for q: QuotaWindow) -> String {
         let f = DateFormatter()
         f.timeStyle = .short
         f.dateStyle = .none
-        return "\(q.provider.capitalized) · \(f.string(from: q.measuredAt))"
+        let when = f.string(from: q.measuredAt)
+        if let a = amount(q.amount) { return "\(a) · \(when)" }
+        return "\(q.provider.capitalized) · \(when)"
+    }
+
+    /// "$70.74 of $100.00", "137 of 500 requests", or nil.
+    /// Mirrors `formatQuotaAmount` in core so the surfaces agree.
+    public static func amount(_ a: QuotaAmount?) -> String? {
+        guard let a else { return nil }
+        func one(_ n: Double) -> String {
+            if a.unit == "usd" {
+                let f = NumberFormatter()
+                f.numberStyle = .currency
+                f.currencyCode = a.currency ?? "USD"
+                f.maximumFractionDigits = 2
+                return f.string(from: NSNumber(value: n)) ?? String(format: "%.2f", n)
+            }
+            return NumberFormatter.localizedString(from: NSNumber(value: n), number: .decimal)
+        }
+        let noun = a.unit == "requests" ? " requests" : ""
+        guard let limit = a.limit else { return "\(one(a.used))\(noun) used" }
+        return "\(one(a.used)) of \(one(limit))\(noun)"
     }
 
     /// Short model label: "claude-opus-5" -> "opus 5", "gpt-5-codex" -> "gpt-5-codex".

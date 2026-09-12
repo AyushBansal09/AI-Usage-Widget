@@ -49,7 +49,8 @@
             "provider": "anthropic",
             "fraction": 0.393,
             "resetsAt": null,
-            "measuredAt": "2026-09-10T18:11:17.753Z"
+            "measuredAt": "2026-09-10T18:11:17.753Z",
+            "amount": { "used": 39.3, "limit": 100, "unit": "usd", "currency": "USD" }
         }
     ],
     "account": { "enabled": true, "token": "ok", "lastFetch": "2026-09-10T17:28:00.000Z" },

@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { AccountStatus, QuotaWindow } from "@ai-usage-widget/core";
+import type { AccountStatus, QuotaAmount, QuotaWindow } from "@ai-usage-widget/core";
 import type { AccountLink } from "./account-link.js";
 
 /**
@@ -112,6 +112,7 @@ export function parseUsageResponse(body: unknown, now: Date = new Date()): Quota
     const fraction = Math.max(0, Math.min(1, u > 1 ? u / 100 : u));
     const r = (v as any).resets_at ?? (v as any).resetsAt ?? null;
     const resetsAt = typeof r === "string" && Number.isFinite(Date.parse(r)) ? new Date(r).toISOString() : null;
+    const amount = key === "extra_usage" ? spendAmount(v, (body as any).spend) : undefined;
     out.push({
       id: key,
       label: LABELS[key]!,
@@ -119,11 +120,33 @@ export function parseUsageResponse(body: unknown, now: Date = new Date()): Quota
       fraction,
       resetsAt,
       measuredAt: now.toISOString(),
+      ...(amount ? { amount } : {}),
     });
   }
   // Stable order: 5h first, then weekly, then the rest as sent.
   const rank = (id: string) => (id === "five_hour" ? 0 : id === "seven_day" ? 1 : 2);
   return out.sort((a, b) => rank(a.id) - rank(b.id));
+}
+
+/**
+ * Real money behind the extra-usage percentage.
+ *
+ * Anthropic reports it twice and in minor units: `extra_usage`
+ * ({used_credits, monthly_limit, decimal_places, currency}) and `spend`
+ * ({used,limit}.{amount_minor, exponent, currency}). Either is enough;
+ * `extra_usage` is preferred because it is the object the percentage came
+ * from, so the two can never disagree. Returns undefined rather than
+ * guessing when neither carries usable numbers.
+ */
+export function spendAmount(extraUsage: any, spend?: any): QuotaAmount | undefined {
+  const scale = (minor: unknown, places: unknown): number | null =>
+    typeof minor === "number" && Number.isFinite(minor) ? minor / 10 ** (typeof places === "number" ? places : 2) : null;
+
+  const used = scale(extraUsage?.used_credits, extraUsage?.decimal_places) ?? scale(spend?.used?.amount_minor, spend?.used?.exponent);
+  if (used === null) return undefined;
+  const limit = scale(extraUsage?.monthly_limit, extraUsage?.decimal_places) ?? scale(spend?.limit?.amount_minor, spend?.limit?.exponent);
+  const currency = typeof extraUsage?.currency === "string" ? extraUsage.currency : typeof spend?.used?.currency === "string" ? spend.used.currency : undefined;
+  return { used, limit: limit !== null && limit > 0 ? limit : null, unit: "usd", ...(currency ? { currency } : {}) };
 }
 
 export interface AnthropicAccountOptions {

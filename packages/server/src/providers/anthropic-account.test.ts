@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AnthropicAccount, parseCredentialJson, parseUsageResponse } from "./anthropic-account.js";
+import { formatQuotaAmount } from "@ai-usage-widget/core";
+import { AnthropicAccount, parseCredentialJson, parseUsageResponse, spendAmount } from "./anthropic-account.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = () => JSON.parse(readFileSync(join(here, "__fixtures__", "oauth-usage.json"), "utf8"));
@@ -24,6 +25,20 @@ describe("parseUsageResponse", () => {
     });
     expect(q[1].fraction).toBe(0.07);
     expect(q[2]).toMatchObject({ label: "Extra usage (spend cap)", fraction: 0.393, resetsAt: null });
+  });
+
+  it("carries the real credit amounts for the extra-usage cap, not just a percentage", () => {
+    const extra = parseUsageResponse(fixture()).find((w) => w.id === "extra_usage")!;
+    // minor units with decimal_places: 3930 -> $39.30 of 10000 -> $100.00
+    expect(extra.amount).toEqual({ used: 39.3, limit: 100, unit: "usd", currency: "USD" });
+    expect(formatQuotaAmount(extra.amount)).toBe("$39.30 of $100.00");
+    expect(extra.fraction).toBeCloseTo(0.393, 5);
+  });
+
+  it("leaves rolling windows without an amount — Anthropic reports no number for them", () => {
+    const q = parseUsageResponse(fixture());
+    expect(q.find((w) => w.id === "five_hour")!.amount).toBeUndefined();
+    expect(q.find((w) => w.id === "seven_day")!.amount).toBeUndefined();
   });
 
   it("drops null windows and keys it has no label for (nimbus_quill, limits, spend)", () => {
@@ -51,6 +66,29 @@ describe("parseUsageResponse", () => {
     expect(parseUsageResponse(null)).toEqual([]);
     expect(parseUsageResponse("nope")).toEqual([]);
     expect(parseUsageResponse({ five_hour: { utilization: "62" } })).toEqual([]);
+  });
+});
+
+describe("spendAmount", () => {
+  it("prefers extra_usage, falls back to the spend object, and gives up rather than guessing", () => {
+    expect(spendAmount({ used_credits: 500, monthly_limit: 2000, decimal_places: 2, currency: "USD" })).toEqual({ used: 5, limit: 20, unit: "usd", currency: "USD" });
+    expect(spendAmount(undefined, { used: { amount_minor: 250, exponent: 2, currency: "EUR" }, limit: { amount_minor: 1000, exponent: 2 } }))
+      .toEqual({ used: 2.5, limit: 10, unit: "usd", currency: "EUR" });
+    // spend with no cap: report what was spent, no fake limit
+    expect(spendAmount({ used_credits: 1234, decimal_places: 2, monthly_limit: 0 })).toEqual({ used: 12.34, limit: null, unit: "usd" });
+    expect(spendAmount(undefined, undefined)).toBeUndefined();
+    expect(spendAmount({ used_credits: "lots" })).toBeUndefined();
+  });
+
+  it("respects decimal_places other than 2", () => {
+    expect(spendAmount({ used_credits: 1500, monthly_limit: 100000, decimal_places: 3 })).toMatchObject({ used: 1.5, limit: 100 });
+  });
+
+  it("formats an uncapped amount and an unknown currency without throwing", () => {
+    expect(formatQuotaAmount({ used: 12.34, limit: null, unit: "usd" })).toBe("$12.34 used");
+    expect(formatQuotaAmount({ used: 1, limit: 2, unit: "usd", currency: "XYZ" })).toMatch(/1\.00/);
+    expect(formatQuotaAmount({ used: 137, limit: 500, unit: "requests" })).toBe("137 of 500 requests");
+    expect(formatQuotaAmount(undefined)).toBeNull();
   });
 });
 

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { existsSync, readFileSync } from "node:fs";
 import { join, extname } from "node:path";
-import { buildAgentSnapshots, efficiency, rollingWindow, budgetWindow, timeline } from "@ai-usage-widget/core";
+import { buildAgentSnapshots, efficiency, rollingWindow, budgetWindow, timeline, formatQuotaAmount } from "@ai-usage-widget/core";
 import type { Collector } from "./collector.js";
 
 const RANGES: Record<string, number> = { "1h": 1, "5h": 5, "24h": 24, "7d": 24 * 7, "30d": 24 * 30 };
@@ -88,6 +88,8 @@ export function createApp(collector: Collector, webDir: string) {
       /** Which window the title is about — it can change provider, so never show the number alone. */
       label: measured?.label ?? primary?.label ?? null,
       provider: measured?.provider ?? null,
+      /** "$70.74 of $100.00" when the provider reports real amounts, else null. */
+      detail: formatQuotaAmount(measured?.amount),
       measuredAt: measured?.measuredAt ?? null,
       fractionUsed: fraction,
       used: primary?.used ?? 0,

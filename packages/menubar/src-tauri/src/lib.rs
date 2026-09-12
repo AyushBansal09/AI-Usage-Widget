@@ -37,6 +37,9 @@ struct TrayInfo {
     /// tray shows whichever is fullest, so the tooltip must name it.
     #[serde(default)]
     label: Option<String>,
+    /// Real amounts behind the percentage, e.g. "$70.74 of $100.00".
+    #[serde(default)]
+    detail: Option<String>,
 }
 
 fn port() -> String {
@@ -114,9 +117,10 @@ fn update_tray(app: &AppHandle) {
                 _ => "",
             };
             let _ = tray.set_title(Some(format!("{prefix}{}", info.title)));
-            let tip = match &info.label {
-                Some(l) => format!("{l} — click for details"),
-                None => "AI Usage Widget — click for details".to_string(),
+            let tip = match (&info.label, &info.detail) {
+                (Some(l), Some(d)) => format!("{l} — {d}"),
+                (Some(l), None) => format!("{l} — click for details"),
+                _ => "AI Usage Widget — click for details".to_string(),
             };
             let _ = tray.set_tooltip(Some(tip));
         }

@@ -123,6 +123,7 @@ function Measured({ q, account }: { q: Summary["quota"][number]; account: Summar
         </div>
         <div className="w-right">
           {q.resetsAt && <div>resets in <b>{fmt.until(q.resetsAt)}</b></div>}
+          {fmt.amount(q.amount) && <div><b>{fmt.amount(q.amount)}</b></div>}
           <div className="w-muted">{q.provider.charAt(0).toUpperCase() + q.provider.slice(1)} · {fmt.ago(q.measuredAt)}{account?.subscription ? ` · ${account.subscription}` : ""}</div>
           {q.fraction >= 1 && <div className="w-warn">limit reached</div>}
         </div>
@@ -133,10 +134,12 @@ function Measured({ q, account }: { q: Summary["quota"][number]; account: Summar
 }
 
 function MiniQuota({ q }: { q: Summary["quota"][number] }) {
+  const amount = fmt.amount(q.amount);
   return (
-    <div className="glass w-mini">
+    <div className="glass w-mini" title={amount ?? undefined}>
       <span className="w-muted">{q.label}</span>
       <b>{fmt.pct(1 - q.fraction)} left</b>
+      {amount && <span className="w-muted">{amount}</span>}
     </div>
   );
 }
