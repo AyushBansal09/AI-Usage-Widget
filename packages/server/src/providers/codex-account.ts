@@ -1,6 +1,6 @@
 import type { AccountStatus, QuotaWindow } from "@ai-usage-widget/core";
 import type { CodexRateLimits } from "@ai-usage-widget/adapter-codex";
-import { emptyStatus, Poller, type AccountLink } from "./account-link.js";
+import { emptyStatus, Poller, seedStatus, type AccountLink } from "./account-link.js";
 
 /**
  * The ChatGPT account's Codex quota — with no network call at all. Codex CLI
@@ -58,6 +58,9 @@ export class CodexAccount implements AccountLink {
   }
   stop(): void {
     this.poller.stop();
+  }
+  seed(quota: QuotaWindow[], lastFetch: string | null): void {
+    this.status = seedStatus(this.status, quota, lastFetch);
   }
 
   async refresh(): Promise<AccountStatus> {

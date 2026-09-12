@@ -1,4 +1,4 @@
-import type { AccountStatus } from "@ai-usage-widget/core";
+import type { AccountStatus, QuotaWindow } from "@ai-usage-widget/core";
 
 /**
  * A provider-account connection: something that polls a provider for the
@@ -14,6 +14,20 @@ export interface AccountLink {
   start(): void;
   stop(): void;
   refresh(): Promise<AccountStatus>;
+  /**
+   * Restore the last quota this link saw in a previous run, so a restart does
+   * not blank the numbers until the next successful poll — which can be a
+   * long wait if the provider is rate-limiting us. Ignored once a live fetch
+   * has produced anything; `measuredAt` still carries the original time, so a
+   * stale figure stays visibly stale.
+   */
+  seed(quota: QuotaWindow[], lastFetch: string | null): void;
+}
+
+/** Default `seed` behaviour: fill in only while we have nothing live. */
+export function seedStatus(status: AccountStatus, quota: QuotaWindow[], lastFetch: string | null): AccountStatus {
+  if (status.quota.length > 0 || quota.length === 0) return status;
+  return { ...status, quota, lastFetch: status.lastFetch ?? lastFetch };
 }
 
 export function emptyStatus(provider: string, enabled: boolean): AccountStatus {

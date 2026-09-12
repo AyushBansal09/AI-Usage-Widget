@@ -3,7 +3,8 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AccountStatus, QuotaWindow } from "@ai-usage-widget/core";
-import { emptyStatus, Poller, type AccountLink } from "./account-link.js";
+
+import { emptyStatus, Poller, seedStatus, type AccountLink } from "./account-link.js";
 
 /**
  * Cursor's plan quota (premium requests used / included) via the login
@@ -125,6 +126,9 @@ export class CursorAccount implements AccountLink {
   }
   stop(): void {
     this.poller.stop();
+  }
+  seed(quota: QuotaWindow[], lastFetch: string | null): void {
+    this.status = seedStatus(this.status, quota, lastFetch);
   }
 
   async refresh(): Promise<AccountStatus> {

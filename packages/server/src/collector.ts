@@ -88,11 +88,44 @@ export class Collector {
       console.error(`[${a.name}] backfill done in ${Date.now() - t0}ms from ${det.location}`);
       if (opts.watch) this.stops.push(await a.watch(emit));
     }
+    // Last known quota, so a restart shows your numbers immediately instead
+    // of blanking until the next successful poll — which can be hours when a
+    // provider is rate-limiting us. Stale figures keep their original
+    // measuredAt, so the UI still shows how old they are.
+    for (const a of this.accounts) this.restoreQuota(a);
     if (opts.watch) {
       for (const a of this.accounts) {
         a.start();
         this.stops.push(() => a.stop());
       }
+      const save = setInterval(() => this.saveQuota(), 60_000);
+      save.unref?.();
+      this.stops.push(() => {
+        clearInterval(save);
+        this.saveQuota();
+      });
+    }
+  }
+
+  private quotaStateKey(provider: string): string {
+    return `quota:${provider}`;
+  }
+
+  private restoreQuota(link: AccountLink): void {
+    const raw = this.store.getState("account", this.quotaStateKey(link.provider));
+    if (!raw) return;
+    try {
+      const saved = JSON.parse(raw) as { quota?: QuotaWindow[]; lastFetch?: string | null };
+      if (Array.isArray(saved.quota) && saved.quota.length) link.seed(saved.quota, saved.lastFetch ?? null);
+    } catch {
+      /* a corrupt cache is not worth a crash; the next poll replaces it */
+    }
+  }
+
+  private saveQuota(): void {
+    for (const a of this.accounts) {
+      if (!a.status.quota.length) continue;
+      this.store.setState("account", this.quotaStateKey(a.provider), JSON.stringify({ quota: a.status.quota, lastFetch: a.status.lastFetch }));
     }
   }
 
