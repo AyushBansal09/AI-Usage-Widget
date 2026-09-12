@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { AccountStatus, QuotaAmount, QuotaWindow } from "@ai-usage-widget/core";
-import type { AccountLink } from "./account-link.js";
+import { seedStatus, type AccountLink } from "./account-link.js";
 
 /**
  * Reads the account's real rolling-window usage from Anthropic, using the
@@ -186,6 +186,10 @@ export class AnthropicAccount implements AccountLink {
       lastError: null,
       quota: [],
     };
+  }
+
+  seed(quota: QuotaWindow[], lastFetch: string | null): void {
+    this.status = seedStatus(this.status, quota, lastFetch);
   }
 
   onChange(fn: (s: AccountStatus) => void): () => void {
