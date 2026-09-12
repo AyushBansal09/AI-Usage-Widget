@@ -93,6 +93,7 @@ export function parseCursorUsage(body: unknown, now: Date = new Date()): QuotaWi
       fraction: Math.max(0, Math.min(1, used / premium.maxRequestUsage)),
       resetsAt,
       measuredAt: now.toISOString(),
+      amount: { used, limit: premium.maxRequestUsage, unit: "requests" },
     });
   }
   return out;

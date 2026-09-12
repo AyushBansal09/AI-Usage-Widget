@@ -120,10 +120,31 @@ What it does and does not do:
 - macOS may ask once whether `node` can read that Keychain item; *Always Allow*.
 
 When connected, the menu bar title, the popover, the WidgetKit widget and the
-dashboard all put the measured 5-hour number first, labelled
-"Anthropic · HH:MM", and keep the local estimates in the secondary row. The
-two are never merged: one is a measurement of your whole account, the other an
-inference from one device's logs.
+dashboard all put the most-constrained measured window first, labelled with
+its provider and fetch time, and keep the local estimates in the secondary
+row. The two are never merged: one is a measurement of your whole account,
+the other an inference from one device's logs.
+
+### Spend and credits
+
+Percentages are not enough when real money is involved, so where a provider
+reports amounts they are shown as amounts:
+
+| Window | Shown as |
+|---|---|
+| Anthropic extra usage (pay-as-you-go credits) | `$39.30 of $100.00` — the cap you set in Anthropic's console |
+| Cursor premium requests | `137 of 500 requests` |
+| Claude 5-hour / weekly, ChatGPT Codex | percentage only — those providers publish no number |
+
+Anthropic sends these in minor units (`used_credits: 3930`, `decimal_places: 2`),
+so `$39.30` is exact, not a conversion of a rounded percentage. If a plan has
+spend with no cap, it reads `$12.34 used` rather than inventing a limit.
+
+This is separate from the **local cost estimate** (`$` figures on the
+dashboard's totals and per-agent rows), which is computed from the pricing
+table and is a floor, not a bill — unpriced models are excluded and marked.
+For a limit of your own, set a `budgets` entry (see Configuration) in `usd`
+or `tokens`; those are your numbers, tracked locally.
 
 ## Cursor
 

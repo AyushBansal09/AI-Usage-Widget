@@ -46,14 +46,18 @@ public struct QuotaWindow: Codable, Equatable, Sendable, Identifiable {
     public var fraction: Double
     public var resetsAt: Date?
     public var measuredAt: Date
+    /// Real amounts behind the ratio (credits spent, requests used), when the
+    /// provider reports them. Optional: most windows are a percentage only.
+    public var amount: QuotaAmount?
 
-    public init(id: String, label: String, provider: String, fraction: Double, resetsAt: Date?, measuredAt: Date) {
+    public init(id: String, label: String, provider: String, fraction: Double, resetsAt: Date?, measuredAt: Date, amount: QuotaAmount? = nil) {
         self.id = id
         self.label = label
         self.provider = provider
         self.fraction = fraction
         self.resetsAt = resetsAt
         self.measuredAt = measuredAt
+        self.amount = amount
     }
 
     public var severity: UsageWindow.Severity {
@@ -63,6 +67,21 @@ public struct QuotaWindow: Codable, Equatable, Sendable, Identifiable {
     }
 
     public var percentLeft: Int { Int(((1 - fraction) * 100).rounded()) }
+}
+
+public struct QuotaAmount: Codable, Equatable, Sendable {
+    public var used: Double
+    public var limit: Double?
+    /// "usd" | "requests"
+    public var unit: String
+    public var currency: String?
+
+    public init(used: Double, limit: Double?, unit: String, currency: String? = nil) {
+        self.used = used
+        self.limit = limit
+        self.unit = unit
+        self.currency = currency
+    }
 }
 
 public struct AccountInfo: Codable, Equatable, Sendable {

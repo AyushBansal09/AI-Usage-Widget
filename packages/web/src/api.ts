@@ -16,8 +16,11 @@ export interface WindowStatus {
 }
 export interface SourceStatus { name: string; available: boolean; location?: string; reason?: string; events: number }
 /** Reported by the provider for the whole account — a measurement, unlike WindowStatus. */
+export interface QuotaAmount { used: number; limit: number | null; unit: "usd" | "requests"; currency?: string }
 export interface QuotaWindow {
   id: string; label: string; provider: string; fraction: number; resetsAt: string | null; measuredAt: string;
+  /** Real amounts behind the ratio, when the provider reports them. */
+  amount?: QuotaAmount;
 }
 export interface AccountStatus {
   provider: string; enabled: boolean; credential: "keychain" | "file" | "database" | "none"; token: "ok" | "expired" | "missing";
@@ -72,6 +75,16 @@ export const fmt = {
   },
   usd(n: number): string {
     return "$" + (n >= 100 ? n.toFixed(0) : n >= 1 ? n.toFixed(2) : n.toFixed(3));
+  },
+  /** "$70.74 of $100.00" / "137 of 500 requests" — matches core's formatQuotaAmount. */
+  amount(a: QuotaAmount | undefined): string | null {
+    if (!a) return null;
+    const one = (n: number) =>
+      a.unit === "usd"
+        ? new Intl.NumberFormat("en-US", { style: "currency", currency: a.currency ?? "USD", maximumFractionDigits: 2 }).format(n)
+        : n.toLocaleString("en-US");
+    const noun = a.unit === "requests" ? " requests" : "";
+    return a.limit === null ? `${one(a.used)}${noun} used` : `${one(a.used)} of ${one(a.limit)}${noun}`;
   },
   pct(n: number): string {
     if (n <= 0) return "0%";

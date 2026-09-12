@@ -30,6 +30,7 @@ describe("parseCursorUsage", () => {
       fraction: 0.274,
       resetsAt: "2026-10-01T00:00:00.000Z",
       measuredAt: "2026-09-11T10:00:00.000Z",
+      amount: { used: 137, limit: 500, unit: "requests" },
     });
   });
 

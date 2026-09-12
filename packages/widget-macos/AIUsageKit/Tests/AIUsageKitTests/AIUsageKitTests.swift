@@ -59,6 +59,25 @@ final class SnapshotDecodingTests: XCTestCase {
         XCTAssertEqual(s.account?.token, "ok")
     }
 
+    /// A spend cap must show the money, not only a percentage.
+    func testSpendCapCarriesRealAmounts() throws {
+        let extra = try XCTUnwrap(try fixture().quota?.first { $0.id == "extra_usage" })
+        XCTAssertEqual(extra.amount, QuotaAmount(used: 39.3, limit: 100, unit: "usd", currency: "USD"))
+        XCTAssertEqual(Format.amount(extra.amount), "$39.30 of $100.00")
+        // The caveat line prefers the amount over the provider name.
+        XCTAssertTrue(Format.caveat(for: extra).hasPrefix("$39.30 of $100.00 · "))
+        // Rolling windows have no amount and keep the provider caption.
+        let fiveHour = try XCTUnwrap(try fixture().measured)
+        XCTAssertNil(fiveHour.amount)
+        XCTAssertTrue(Format.caveat(for: fiveHour).hasPrefix("Anthropic · "))
+    }
+
+    func testAmountFormatting() {
+        XCTAssertEqual(Format.amount(QuotaAmount(used: 137, limit: 500, unit: "requests")), "137 of 500 requests")
+        XCTAssertEqual(Format.amount(QuotaAmount(used: 12.34, limit: nil, unit: "usd")), "$12.34 used")
+        XCTAssertNil(Format.amount(nil))
+    }
+
     /// An older collector without `quota` still decodes, and falls back to the estimate.
     func testQuotaIsOptional() throws {
         let json = """

@@ -168,6 +168,22 @@ export interface QuotaWindow {
   resetsAt: string | null;
   /** When we fetched it; exact as of this instant only. */
   measuredAt: string;
+  /**
+   * The real quantity behind the ratio, when the provider reports one —
+   * e.g. Anthropic's extra-usage credits ($39.30 of $100.00) or Cursor's
+   * premium requests (137 of 500). Absent when a provider only publishes a
+   * percentage, which is why `fraction` stays the primary field.
+   */
+  amount?: QuotaAmount;
+}
+
+export interface QuotaAmount {
+  used: number;
+  /** null when the provider reports spend without a cap. */
+  limit: number | null;
+  unit: "usd" | "requests";
+  /** ISO-4217, for `usd`-unit amounts that are not actually dollars. */
+  currency?: string;
 }
 
 /** Health of an optional provider-account connection. Never carries a token. */
